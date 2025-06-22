@@ -2,7 +2,6 @@
 *.d
 
 main
-main.cpp
 
 # Compiled Object files
 *.slo
