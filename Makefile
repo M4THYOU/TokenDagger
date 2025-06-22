@@ -16,14 +16,14 @@ CXX_FLAGS_PROFILE = -std=c++17 -O1 -g -fno-omit-frame-pointer -fno-inline-small-
 CXX_FLAGS = $(CXX_FLAGS_RELEASE)
 
 # Include directories
-INCLUDES = -I./tiktoken
+INCLUDES = -I./src/tiktoken -I./src
 
 # Libraries
 LIBS = -lpcre2-8
 TIKTOKEN_LIB = tiktoken/libtiktoken.a
 
 # Source files
-CPP_SOURCES = main.cpp
+CPP_SOURCES = src/main.cpp
 
 # Output executable
 TARGET = main
@@ -44,7 +44,7 @@ profile: $(TARGET)
 
 # Build the tiktoken library first
 $(TIKTOKEN_LIB):
-	$(MAKE) -C tiktoken
+	$(MAKE) -C src/tiktoken
 
 # Build the C++ executable (depends on tiktoken library)
 $(TARGET): $(CPP_SOURCES) $(TIKTOKEN_LIB)
@@ -60,7 +60,7 @@ main.o: $(CPP_SOURCES)
 # Clean build artifacts (including tiktoken)
 clean:
 	rm -f $(TARGET) *.o
-	$(MAKE) -C tiktoken clean
+	$(MAKE) -C src/tiktoken clean
 
 # Clean only main project
 clean-main:
@@ -68,7 +68,7 @@ clean-main:
 
 # Clean only tiktoken
 clean-tiktoken:
-	$(MAKE) -C tiktoken clean
+	$(MAKE) -C src/tiktoken clean
 
 # Test the executable
 test: $(TARGET)
