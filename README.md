@@ -17,3 +17,8 @@ A blazingly fast, memory-efficient implementation of OpenAI's TikToken tokenizer
 ## 📦 Installation
 
 ### From PyPI (Recommended)
+
+## Dependencies
+- **nlohmann/json**: JSON parser - [GitHub](https://github.com/nlohmann/json)
+- **emhash8**: High-performance hash table - [GitHub](https://github.com/ktprime/emhash)
+- **PCRE2**: Perl Compatible Regular Expressions - [GitHub](https://github.com/PCRE2Project/pcre2)
