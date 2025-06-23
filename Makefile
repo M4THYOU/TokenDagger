@@ -20,7 +20,7 @@ INCLUDES = -I./src/tiktoken -I./src
 
 # Libraries
 LIBS = -lpcre2-8
-TIKTOKEN_LIB = tiktoken/libtiktoken.a
+TIKTOKEN_LIB = src/tiktoken/libtiktoken.a
 
 # Source files
 CPP_SOURCES = src/main.cpp
