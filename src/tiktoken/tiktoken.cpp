@@ -6,7 +6,6 @@
 #include <stdexcept>
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
-// #include <iostream>
 
 namespace tiktoken {
 
@@ -105,9 +104,26 @@ namespace tiktoken {
         throw TiktokenError("encode not implemented");
     }
 
-    std::string CoreBPE::decode(const std::vector<int>& tokens) const {
-        // TODO: Implement BPE decoding
-        throw TiktokenError("decode not implemented");
+    std::vector<unsigned char> CoreBPE::decode(const std::vector<int>& tokens) const {
+        // TODO: implement after encode is fully implemented.
+        // std::vector<unsigned char> ret;
+        // ret.reserve(tokens.size() * 2);
+        // for (int token : tokens) {
+        //     std::vector<unsigned char> token_bytes;
+        //     auto it = decoder.find(token);
+        //     if (it != decoder.end()) {
+        //         token_bytes = it->second;
+        //     } else {
+        //         auto special_it = special_tokens_decoder.find(token);
+        //         if (special_it != special_tokens_decoder.end()) {
+        //             token_bytes = special_it->second;
+        //         } else {
+        //             throw TiktokenError("Invalid token for decoding: " + std::to_string(token));
+        //         }
+        //     }
+        //     ret.insert(ret.end(), token_bytes.begin(), token_bytes.end());
+        // }
+        // return ret;
     }
 
     int get_rank(const std::vector<unsigned char>& piece, const emhash8::HashMap<std::vector<unsigned char>, int, VectorHashEmhash>& encoder, const std::vector<std::pair<size_t, int>>& parts, size_t idx) {

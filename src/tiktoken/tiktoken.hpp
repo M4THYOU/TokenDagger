@@ -86,7 +86,7 @@ namespace tiktoken {
         // BPE-specific methods
         std::vector<int> encode_ordinary(const std::string& text) const;
         std::vector<int> encode(const std::string& text, const std::vector<std::string>& allowed_special) const;
-        std::string decode(const std::vector<int>& tokens) const;
+        std::vector<unsigned char> decode(const std::vector<int>& tokens) const;
         
     private:
         std::vector<std::string> split_text(const std::string& text) const;

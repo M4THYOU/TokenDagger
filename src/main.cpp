@@ -55,7 +55,7 @@ namespace SpecialTokens {
     constexpr int BEGIN_TOOL_CONTENT = 19;
 }
 
-struct Tokenizer {
+struct MistralTokenizer {
     TokenizerConfig config;
     std::vector<VocabItem> vocab;
     std::unique_ptr<tiktoken::CoreBPE> bpe;
@@ -75,7 +75,7 @@ struct Tokenizer {
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TokenizerConfig, pattern, num_vocab_tokens, default_vocab_size, default_num_special_tokens, version);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(VocabItem, rank, token_bytes, token_str);
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Tokenizer, config, vocab);
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(MistralTokenizer, config, vocab);
 
 static std::string base64_decode(const std::string &in) {
     std::string out;
@@ -96,7 +96,7 @@ static std::string base64_decode(const std::string &in) {
 }
 
 
-void LoadTokenizer(const std::string& filename, Tokenizer& tokenizer) {
+void LoadTokenizer(const std::string& filename, MistralTokenizer& tokenizer) {
     std::ifstream file(filename);
     nlohmann::json json_data;
     file >> json_data;
@@ -146,7 +146,7 @@ void LoadTokenizer(const std::string& filename, Tokenizer& tokenizer) {
 }
 
 
-void Tokenize(const Tokenizer& tokenizer, const std::string& prompt) {
+void Tokenize(const MistralTokenizer& tokenizer, const std::string& prompt) {
     auto start_time = std::chrono::high_resolution_clock::now();
     std::vector<int> tokens = tokenizer.encode(prompt);
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -187,7 +187,7 @@ int main() {
 
     // build the tokenizer.
     std::string tokenizer_path = "/home/ubuntu/mistral_models/ministral-8b-2410/tekken.json";
-    Tokenizer tokenizer;
+    MistralTokenizer tokenizer;
     LoadTokenizer(tokenizer_path, tokenizer);
 
     // printf("Tokenizer loaded successfully!\n");
