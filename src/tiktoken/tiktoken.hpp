@@ -74,7 +74,7 @@ namespace tiktoken {
     private:
         // [start_offset, end_offset). Caller is responsible for ensuring that end_offset is <= text.length().
         std::vector<std::string> split_text(const std::string& text, const size_t start_offset, const size_t end_offset) const;
-        std::pair<size_t, std::string> find_next_special_token(const std::string& text, size_t start_pos) const;
+        std::pair<size_t, std::string> find_next_special_token(const std::string& text, size_t start_pos, const emhash8::HashSet<std::string>& special_vocab) const;
         bool init_regex(const std::string& pattern);
     };
 

@@ -86,10 +86,10 @@ namespace tiktoken {
         return pieces;
     }
 
-    std::pair<size_t, std::string> CoreBPE::find_next_special_token(const std::string& text, size_t start_pos) const {
+    std::pair<size_t, std::string> CoreBPE::find_next_special_token(const std::string& text, size_t start_pos, const emhash8::HashSet<std::string>& special_vocab) const {
         size_t min_pos = std::string::npos;
         std::string found_token;
-        for (const auto& [token_str, rank] : special_encoder) {
+        for (const auto& token_str : special_vocab) {
             size_t pos = text.find(token_str, start_pos);
             if (pos != std::string::npos && (min_pos == std::string::npos || pos < min_pos)) {
                 min_pos = pos;
@@ -116,6 +116,13 @@ namespace tiktoken {
         std::vector<int> result;
         result.reserve(text.length());
 
+        // Validate that all allowed_special tokens exist in special_encoder
+        for (const auto& special_token : allowed_special) {
+            if (special_encoder.find(special_token) == special_encoder.end()) {
+                throw TiktokenError("Special token '" + special_token + "' not found in special encoder");
+            }
+        }
+
         int start = 0;
         int last_piece_token_len = 0; // number of tokens in the last piece (i.e. last regex match).
         std::string next_special_token;
@@ -125,7 +132,7 @@ namespace tiktoken {
             int next_special_token_pos = std::string::npos;
             int start_offset = start;
             while (true) {
-                auto [pos, token] = find_next_special_token(text, start_offset);
+                auto [pos, token] = find_next_special_token(text, start_offset, allowed_special);
                 if (pos == std::string::npos) { // not found, no more special tokens.
                     break;
                 }
@@ -139,11 +146,8 @@ namespace tiktoken {
                 next_special_token_pos = pos;
                 break;
             }
-            // printf("next_special_token: %s, next_special_token_pos: %d\n", next_special_token.c_str(), next_special_token_pos);
             int end = next_special_token_pos == std::string::npos ? text.length() : next_special_token_pos;
 
-            // printf("start: %d, end: %d\n", start, end);
-            
             // now process the text normally, up until the found special token (or the end of the text).
             auto pieces = split_text(text, start, end);
             int prev_result_size = result.size();
