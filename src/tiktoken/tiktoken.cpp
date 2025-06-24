@@ -136,11 +136,6 @@ namespace tiktoken {
                 if (pos == std::string::npos) { // not found, no more special tokens.
                     break;
                 }
-                if (allowed_special.find(token) == allowed_special.end()) {
-                    // not allowed, continue searching.
-                    start_offset = pos + token.length();
-                    continue;
-                }
                 // found an allowed special token.
                 next_special_token = token;
                 next_special_token_pos = pos;
