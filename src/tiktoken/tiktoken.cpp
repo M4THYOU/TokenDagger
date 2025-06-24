@@ -105,6 +105,7 @@ namespace tiktoken {
         auto pieces = split_text(text, 0, text.length());
         for (const auto& piece : pieces) {
             std::vector<unsigned char> bytes(piece.begin(), piece.end());
+            // TODO: check if the bytes exist in the encoder, direct lookup before falling back to BPE.
             byte_pair_encode(bytes, encoder, result);
         }
         
@@ -149,6 +150,12 @@ namespace tiktoken {
             for (const auto& piece : pieces) {
                 prev_result_size = result.size();
                 std::vector<unsigned char> bytes(piece.begin(), piece.end());
+                auto it = encoder.find(bytes);
+                if (it != encoder.end()) {
+                    result.push_back(it->second);
+                    last_piece_token_len = 1;
+                    continue;
+                }
                 byte_pair_encode(bytes, encoder, result);
             }
             last_piece_token_len = result.size() - prev_result_size;
