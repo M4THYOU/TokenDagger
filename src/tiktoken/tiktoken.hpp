@@ -6,6 +6,7 @@
 #include <stdexcept>
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
+#include "hash_set8.hpp"
 #include "hash_table8.hpp"
 
 struct VocabItem {
@@ -16,25 +17,6 @@ struct VocabItem {
 
 namespace tiktoken {
 
-    // Custom hash function for std::vector<unsigned char>
-    struct VectorHash {
-        std::size_t operator()(const std::vector<unsigned char>& vec) const {
-            std::size_t hash = vec.size();
-            for (unsigned char byte : vec) {
-                hash ^= byte + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-            }
-            return hash;
-        }
-    };
-    struct VectorHashSimple {
-        std::size_t operator()(const std::vector<unsigned char>& vec) const {
-            std::size_t hash = 0;
-            for (unsigned char byte : vec) {
-                hash = hash * 31 + byte;  // Simple hash function
-            }
-            return hash;
-        }
-    };
     struct VectorHashEmhash {
         std::size_t operator()(const std::vector<unsigned char>& vec) const {
             std::size_t hash = 0;
@@ -57,11 +39,9 @@ namespace tiktoken {
     private:
         // Replace std::unordered_map with emhash8::HashMap
         emhash8::HashMap<std::vector<unsigned char>, int, VectorHashEmhash> encoder;
-        emhash8::HashMap<std::vector<unsigned char>, int, VectorHashEmhash> special_encoder;
+        emhash8::HashMap<std::string, int> special_encoder;
         pcre2_code* regex_pattern = nullptr;
-        pcre2_code* special_regex_pattern = nullptr;
         pcre2_match_data* match_data = nullptr;
-        pcre2_match_data* special_match_data = nullptr;
 
     public:
         CoreBPE(const std::string& pattern, const std::vector<VocabItem>& vocab, const std::vector<VocabItem>& special_vocab) {
@@ -72,9 +52,9 @@ namespace tiktoken {
             }
             special_encoder.reserve(special_vocab.size()*1.5);
             for (const auto& item : special_vocab) {
-                special_encoder.emplace_unique(item.token_bytes, item.rank);
+                special_encoder.emplace_unique(item.token_string, item.rank);
             }
-            init_regex(pattern, special_vocab);
+            init_regex(pattern);
         }
         
         ~CoreBPE() { 
@@ -84,22 +64,18 @@ namespace tiktoken {
             if (match_data) {
                 pcre2_match_data_free(match_data);
             }
-            if (special_regex_pattern) {
-                pcre2_code_free_8(special_regex_pattern);
-            }
-            if (special_match_data) {
-                pcre2_match_data_free(special_match_data);
-            }
         }
         
         // BPE-specific methods
         std::vector<int> encode_ordinary(const std::string& text) const;
-        std::vector<int> encode(const std::string& text, const std::vector<std::string>& allowed_special) const;
+        std::pair<std::vector<int>, int> encode(const std::string& text, const emhash8::HashSet<std::string>& allowed_special) const;
         std::vector<unsigned char> decode(const std::vector<int>& tokens) const;
         
     private:
-        std::vector<std::string> split_text(const std::string& text) const;
-        bool init_regex(const std::string& pattern, const std::vector<VocabItem>& special_vocab);
+        // [start_offset, end_offset). Caller is responsible for ensuring that end_offset is <= text.length().
+        std::vector<std::string> split_text(const std::string& text, const size_t start_offset, const size_t end_offset) const;
+        std::pair<size_t, std::string> find_next_special_token(const std::string& text, size_t start_pos) const;
+        bool init_regex(const std::string& pattern);
     };
 
     // Function declarations - updated to use emhash

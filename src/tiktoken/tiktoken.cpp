@@ -9,7 +9,7 @@
 
 namespace tiktoken {
 
-    bool CoreBPE::init_regex(const std::string& pattern, const std::vector<VocabItem>& special_vocab) {
+    bool CoreBPE::init_regex(const std::string& pattern) {
         int error_number;
         PCRE2_SIZE error_offset;
         // Enable UTF-8 mode and Unicode properties for proper Unicode support
@@ -30,28 +30,10 @@ namespace tiktoken {
         }
         match_data = pcre2_match_data_create_from_pattern(regex_pattern, nullptr);
 
-        std::string special_string;
-        for (const auto& item : special_vocab) {
-            special_string += item.token_string + "|";
-        }
-        special_string = special_string.substr(0, special_string.size() - 1);
-        // printf("special_string: %s\n", special_string.c_str());
-        special_regex_pattern = pcre2_compile_8(
-            (PCRE2_SPTR8)special_string.c_str(), 
-            PCRE2_ZERO_TERMINATED, PCRE2_UTF | PCRE2_UCP, &error_number, &error_offset, NULL);
-        if (special_regex_pattern == nullptr) {
-            printf("ERROR: PCRE2 compilation failed: %d at offset %zu\n", error_number, (size_t)error_offset);
-            return false;
-        }
-        if (pcre2_jit_compile_8(special_regex_pattern, PCRE2_JIT_COMPLETE) < 0) {
-            printf("ERROR: PCRE2 built without JIT, expect it to be slow\n");
-        }
-        special_match_data = pcre2_match_data_create_from_pattern(special_regex_pattern, nullptr);
-
         return true;
     }
 
-    std::vector<std::string> CoreBPE::split_text(const std::string& text) const {
+    std::vector<std::string> CoreBPE::split_text(const std::string& text, const size_t start, const size_t end_offset) const {
         std::vector<std::string> pieces;
 
         if (regex_pattern == nullptr) {
@@ -59,12 +41,11 @@ namespace tiktoken {
             return pieces;
         }
 
-        PCRE2_SIZE start_offset = 0;
-        const PCRE2_SIZE subject_length = text.length();
-        while (start_offset < subject_length) {
+        PCRE2_SIZE start_offset = start;
+        while (start_offset < end_offset) {
             int rc = pcre2_match(
                 regex_pattern,
-                (PCRE2_SPTR8)text.data(), text.size(),
+                (PCRE2_SPTR8)text.data(), end_offset,
                 start_offset,
                 PCRE2_NO_UTF_CHECK | PCRE2_NOTEMPTY,   // for performance
                 match_data,
@@ -73,7 +54,7 @@ namespace tiktoken {
             if (rc < 0) {
                 if (rc == PCRE2_ERROR_NOMATCH) {
                     // No more matches, add remaining text if any
-                    if (start_offset < subject_length) {
+                    if (start_offset < end_offset) {
                         pieces.push_back(text.substr(start_offset));
                     }
                     break;
@@ -89,7 +70,7 @@ namespace tiktoken {
             PCRE2_SIZE match_end = ovector[1];
             
             // Add the matched piece
-            if (match_start < match_end) {
+            if (match_start < match_end) {  // TODO: might need to include start offset here.
                 pieces.push_back(text.substr(match_start, match_end - match_start));
             }
             
@@ -105,10 +86,23 @@ namespace tiktoken {
         return pieces;
     }
 
+    std::pair<size_t, std::string> CoreBPE::find_next_special_token(const std::string& text, size_t start_pos) const {
+        size_t min_pos = std::string::npos;
+        std::string found_token;
+        for (const auto& [token_str, rank] : special_encoder) {
+            size_t pos = text.find(token_str, start_pos);
+            if (pos != std::string::npos && (min_pos == std::string::npos || pos < min_pos)) {
+                min_pos = pos;
+                found_token = token_str;
+            }
+        }
+        return {min_pos, found_token};
+    }
+
     std::vector<int> CoreBPE::encode_ordinary(const std::string& text) const {
         std::vector<int> result;
         // Split text using regex
-        auto pieces = split_text(text);
+        auto pieces = split_text(text, 0, text.length());
         for (const auto& piece : pieces) {
             std::vector<unsigned char> bytes(piece.begin(), piece.end());
             byte_pair_encode(bytes, encoder, result);
@@ -117,10 +111,62 @@ namespace tiktoken {
         return result;
     }
 
-    std::vector<int> CoreBPE::encode(const std::string& text, const std::vector<std::string>& allowed_special) const {
-        // TODO: Implement BPE encoding with special tokens
-        throw TiktokenError("encode not implemented");
+    std::pair<std::vector<int>, int> CoreBPE::encode(const std::string& text, const emhash8::HashSet<std::string>& allowed_special) const {
+        std::vector<int> result;
+        result.reserve(text.length());
+
+        int start = 0;
+        int last_piece_token_len = 0; // number of tokens in the last piece (i.e. last regex match).
+        std::string next_special_token;
+        while (true) {
+            // find the next allowed special token.
+            next_special_token = "";
+            int next_special_token_pos = std::string::npos;
+            int start_offset = start;
+            while (true) {
+                auto [pos, token] = find_next_special_token(text, start_offset);
+                if (pos == std::string::npos) { // not found, no more special tokens.
+                    break;
+                }
+                if (allowed_special.find(token) == allowed_special.end()) {
+                    // not allowed, continue searching.
+                    start_offset = pos + token.length();
+                    continue;
+                }
+                // found an allowed special token.
+                next_special_token = token;
+                next_special_token_pos = pos;
+                break;
+            }
+            // printf("next_special_token: %s, next_special_token_pos: %d\n", next_special_token.c_str(), next_special_token_pos);
+            int end = next_special_token_pos == std::string::npos ? text.length() : next_special_token_pos;
+
+            // printf("start: %d, end: %d\n", start, end);
+            
+            // now process the text normally, up until the found special token (or the end of the text).
+            auto pieces = split_text(text, start, end);
+            int prev_result_size = result.size();
+            for (const auto& piece : pieces) {
+                prev_result_size = result.size();
+                std::vector<unsigned char> bytes(piece.begin(), piece.end());
+                byte_pair_encode(bytes, encoder, result);
+            }
+            last_piece_token_len = result.size() - prev_result_size;
+
+            // encode the special token.
+            if (next_special_token != "") {
+                result.push_back(special_encoder.at(next_special_token));
+                // update the start position.
+                start = end + next_special_token.length();
+                last_piece_token_len = 0;
+            } else {
+                // otherwise, we must have reached the end of the text.
+                break;
+            }
+
+        }
         
+        return {result, last_piece_token_len};
     }
 
     std::vector<unsigned char> CoreBPE::decode(const std::vector<int>& tokens) const {

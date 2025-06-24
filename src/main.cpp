@@ -54,7 +54,7 @@ struct Llama4Tokenizer {
         if (bpe) {
             // auto result = bpe->encode_ordinary(prompt);
             auto result = bpe->encode(prompt, {Llama4SpecialTokens::BOS.content, Llama4SpecialTokens::EOS.content, Llama4SpecialTokens::FULL_EOS.content});
-            for (int token : result) {
+            for (auto token : result.first) {
                 tokens.push_back(token);
             }
         }
