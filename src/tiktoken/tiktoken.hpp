@@ -6,14 +6,12 @@
 #include <stdexcept>
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
-
-// Include emhash - you'll need to download hash_table8.hpp from https://github.com/ktprime/emhash
 #include "hash_table8.hpp"
 
 struct VocabItem {
     int rank;
     std::vector<unsigned char> token_bytes;
-    std::string token_str;
+    std::string token_string;
 };
 
 namespace tiktoken {
@@ -59,17 +57,24 @@ namespace tiktoken {
     private:
         // Replace std::unordered_map with emhash8::HashMap
         emhash8::HashMap<std::vector<unsigned char>, int, VectorHashEmhash> encoder;
+        emhash8::HashMap<std::vector<unsigned char>, int, VectorHashEmhash> special_encoder;
         pcre2_code* regex_pattern = nullptr;
+        pcre2_code* special_regex_pattern = nullptr;
         pcre2_match_data* match_data = nullptr;
+        pcre2_match_data* special_match_data = nullptr;
 
     public:
-        CoreBPE(const std::vector<VocabItem>& vocab) {
+        CoreBPE(const std::string& pattern, const std::vector<VocabItem>& vocab, const std::vector<VocabItem>& special_vocab) {
             // Reserve space for better performance
             encoder.reserve(vocab.size()*1.5);
             for (const auto& item : vocab) {
                 encoder.emplace_unique(item.token_bytes, item.rank);  // Use emplace_unique for better performance
             }
-            // printf("encoder load factor: %f\n", encoder.load_factor());
+            special_encoder.reserve(special_vocab.size()*1.5);
+            for (const auto& item : special_vocab) {
+                special_encoder.emplace_unique(item.token_bytes, item.rank);
+            }
+            init_regex(pattern, special_vocab);
         }
         
         ~CoreBPE() { 
@@ -79,9 +84,13 @@ namespace tiktoken {
             if (match_data) {
                 pcre2_match_data_free(match_data);
             }
+            if (special_regex_pattern) {
+                pcre2_code_free_8(special_regex_pattern);
+            }
+            if (special_match_data) {
+                pcre2_match_data_free(special_match_data);
+            }
         }
-        
-        bool init_regex(const std::string& pattern);
         
         // BPE-specific methods
         std::vector<int> encode_ordinary(const std::string& text) const;
@@ -90,6 +99,7 @@ namespace tiktoken {
         
     private:
         std::vector<std::string> split_text(const std::string& text) const;
+        bool init_regex(const std::string& pattern, const std::vector<VocabItem>& special_vocab);
     };
 
     // Function declarations - updated to use emhash

@@ -9,7 +9,7 @@
 
 namespace tiktoken {
 
-    bool CoreBPE::init_regex(const std::string& pattern) {
+    bool CoreBPE::init_regex(const std::string& pattern, const std::vector<VocabItem>& special_vocab) {
         int error_number;
         PCRE2_SIZE error_offset;
         // Enable UTF-8 mode and Unicode properties for proper Unicode support
@@ -29,6 +29,24 @@ namespace tiktoken {
             printf("ERROR: PCRE2 built without JIT, expect it to be slow\n");
         }
         match_data = pcre2_match_data_create_from_pattern(regex_pattern, nullptr);
+
+        std::string special_string;
+        for (const auto& item : special_vocab) {
+            special_string += item.token_string + "|";
+        }
+        special_string = special_string.substr(0, special_string.size() - 1);
+        // printf("special_string: %s\n", special_string.c_str());
+        special_regex_pattern = pcre2_compile_8(
+            (PCRE2_SPTR8)special_string.c_str(), 
+            PCRE2_ZERO_TERMINATED, PCRE2_UTF | PCRE2_UCP, &error_number, &error_offset, NULL);
+        if (special_regex_pattern == nullptr) {
+            printf("ERROR: PCRE2 compilation failed: %d at offset %zu\n", error_number, (size_t)error_offset);
+            return false;
+        }
+        if (pcre2_jit_compile_8(special_regex_pattern, PCRE2_JIT_COMPLETE) < 0) {
+            printf("ERROR: PCRE2 built without JIT, expect it to be slow\n");
+        }
+        special_match_data = pcre2_match_data_create_from_pattern(special_regex_pattern, nullptr);
 
         return true;
     }
@@ -102,6 +120,7 @@ namespace tiktoken {
     std::vector<int> CoreBPE::encode(const std::string& text, const std::vector<std::string>& allowed_special) const {
         // TODO: Implement BPE encoding with special tokens
         throw TiktokenError("encode not implemented");
+        
     }
 
     std::vector<unsigned char> CoreBPE::decode(const std::vector<int>& tokens) const {
@@ -136,7 +155,6 @@ namespace tiktoken {
             for (size_t i = start_idx; i < end_idx; ++i) {
                 pair.push_back(piece[i]);
             }
-            // Use emhash's try_get for better performance
             auto* value_ptr = encoder.try_get(pair);
             return value_ptr ? *value_ptr : INT_MAX;
         }
@@ -154,7 +172,6 @@ namespace tiktoken {
 
         for (size_t i = 0; i < piece.size() - 1; ++i) {
             const auto &pair = std::vector<unsigned char>{piece[i], piece[i + 1]};
-            // Use emhash's try_get for better performance
             auto* value_ptr = encoder.try_get(pair);
             int rank = value_ptr ? *value_ptr : INT_MAX;
             
@@ -201,7 +218,17 @@ namespace tiktoken {
             for (size_t j = start_idx; j < end_idx; ++j) {
                 pair.push_back(piece[j]);
             }
-            result.push_back(encoder.at(pair));
+            const auto* value_ptr = encoder.try_get(pair);
+            if (value_ptr) {
+                result.push_back(*value_ptr);
+            } else {
+                printf("No value found for pair: ");
+                for (const auto& byte : pair) {
+                    printf("%d ", byte);
+                }
+                printf("\n");
+                result.push_back(INT_MAX);
+            }
         }
     }
 
