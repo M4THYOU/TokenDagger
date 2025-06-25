@@ -67,7 +67,7 @@ try:
     
     tokenizer = tokendagger.create_tokenizer(
         name="test_tokenizer",
-        pattern=r"[a-zA-Z]+|[0-9]+|[^\w\s]",  # Simple pattern for words, numbers, and punctuation
+        pattern=r"[a-zA-Z]+|\s+|[0-9]+|[^\w\s]",  # NEW - includes \s+ for spaces
         vocab=vocab_data,
         special_tokens=special_tokens
     )
@@ -120,81 +120,81 @@ except Exception as e:
 
 ####################################################################################
 
-# # Test 2: Special token handling
-# print(f"\n2. Testing special token handling:")
-# print(f"   Text: '{formatted_prompt[:50]}...'")
+# Test 2: Special token handling
+print(f"\n2. Testing special token handling:")
+print(f"   Text: '{formatted_prompt[:50]}...'")
 
-# try:
-#     # Test with special tokens allowed
-#     t0 = time.time()
-#     tokens_with_special = tokenizer.encode(
-#         formatted_prompt, 
-#         allowed_special={"<|begin_of_text|>", "<|eot|>", "<|end_of_text|>"}
-#     )
-#     t1 = time.time()
+try:
+    # Test with special tokens allowed
+    t0 = time.time()
+    tokens_with_special = tokenizer.encode(
+        formatted_prompt, 
+        allowed_special={"<|begin_of_text|>", "<|eot|>", "<|end_of_text|>"}
+    )
+    t1 = time.time()
     
-#     print(f"   ✓ Time taken: {(t1 - t0) * 1000:.2f}ms")
-#     print(f"   ✓ Token count with special: {len(tokens_with_special)}")
-#     print(f"   ✓ First 10 tokens: {tokens_with_special[:10]}")
+    print(f"   ✓ Time taken: {(t1 - t0) * 1000:.2f}ms")
+    print(f"   ✓ Token count with special: {len(tokens_with_special)}")
+    print(f"   ✓ First 10 tokens: {tokens_with_special[:10]}")
     
-#     # Test decoding
-#     decoded_special = tokenizer.decode(tokens_with_special)
-#     print(f"   ✓ Contains special tokens: {'<|begin_of_text|>' in decoded_special}")
+    # Test decoding
+    decoded_special = tokenizer.decode(tokens_with_special)
+    print(f"   ✓ Contains special tokens: {'<|begin_of_text|>' in decoded_special}")
     
-# except Exception as e:
-#     print(f"   ✗ Special token encoding failed: {e}")
-
-####################################################################################
-
-# # Test 3: Error handling for disallowed special tokens
-# print(f"\n3. Testing disallowed special token handling:")
-
-# try:
-#     # This should raise an error
-#     tokens_error = tokenizer.encode(formatted_prompt)  # No special tokens allowed by default
-#     print(f"   ✗ Should have raised an error but didn't!")
-    
-# except ValueError as e:
-#     print(f"   ✓ Correctly caught disallowed special token: {str(e)[:100]}...")
-    
-# except Exception as e:
-#     print(f"   ✗ Unexpected error: {e}")
+except Exception as e:
+    print(f"   ✗ Special token encoding failed: {e}")
 
 ####################################################################################
 
-# # Test 4: Performance comparison (if we have a longer text)
-# if len(prompt) > 100:
-#     print(f"\n4. Testing with longer text ({len(prompt)} characters):")
+# Test 3: Error handling for disallowed special tokens
+print(f"\n3. Testing disallowed special token handling:")
+
+try:
+    # This should raise an error
+    tokens_error = tokenizer.encode(formatted_prompt)  # No special tokens allowed by default
+    print(f"   ✗ Should have raised an error but didn't!")
     
-#     try:
-#         t0 = time.time()
-#         long_tokens = tokenizer.encode_ordinary(prompt[:1000])  # First 1000 chars to avoid issues
-#         t1 = time.time()
+except ValueError as e:
+    print(f"   ✓ Correctly caught disallowed special token: {str(e)[:100]}...")
+    
+except Exception as e:
+    print(f"   ✗ Unexpected error: {e}")
+
+####################################################################################
+
+# Test 4: Performance comparison (if we have a longer text)
+if len(prompt) > 100:
+    print(f"\n4. Testing with longer text ({len(prompt)} characters):")
+    
+    try:
+        t0 = time.time()
+        long_tokens = tokenizer.encode_ordinary(prompt[:1000])  # First 1000 chars to avoid issues
+        t1 = time.time()
         
-#         print(f"   ✓ Time taken: {(t1 - t0) * 1000:.2f}ms")
-#         print(f"   ✓ Token count: {len(long_tokens)}")
-#         print(f"   ✓ Tokens per character: {len(long_tokens) / 1000:.2f}")
+        print(f"   ✓ Time taken: {(t1 - t0) * 1000:.2f}ms")
+        print(f"   ✓ Token count: {len(long_tokens)}")
+        print(f"   ✓ Tokens per character: {len(long_tokens) / 1000:.2f}")
         
-#     except Exception as e:
-#         print(f"   ✗ Long text encoding failed: {e}")
+    except Exception as e:
+        print(f"   ✗ Long text encoding failed: {e}")
 
 ####################################################################################
 
-# print(f"\n5. Tokenizer information:")
-# print(f"   Name: {tokenizer.name}")
-# print(f"   Vocabulary size: {tokenizer.n_vocab}")
-# print(f"   Max token value: {tokenizer.max_token_value}")
-# print(f"   Special tokens: {len(tokenizer.special_tokens_set)}")
+print(f"\n5. Tokenizer information:")
+print(f"   Name: {tokenizer.name}")
+print(f"   Vocabulary size: {tokenizer.n_vocab}")
+print(f"   Max token value: {tokenizer.max_token_value}")
+print(f"   Special tokens: {len(tokenizer.special_tokens_set)}")
 
-# # Show some token examples
-# if len(tokens) > 0:
-#     print(f"\n6. Token examples:")
-#     for i, token_id in enumerate(tokens[:5]):
-#         try:
-#             decoded_token = tokenizer.decode([token_id])
-#             print(f"   Token {token_id}: '{decoded_token}'")
-#         except:
-#             print(f"   Token {token_id}: <decode error>")
+# Show some token examples
+if len(tokens) > 0:
+    print(f"\n6. Token examples:")
+    for i, token_id in enumerate(tokens[:5]):
+        try:
+            decoded_token = tokenizer.decode([token_id])
+            print(f"   Token {token_id}: '{decoded_token}'")
+        except:
+            print(f"   Token {token_id}: <decode error>")
 
 print("\n" + "="*80)
 print("TEST COMPLETE")
