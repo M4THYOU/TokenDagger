@@ -97,8 +97,11 @@ namespace tiktoken {
                 if (pos != std::string::npos && (min_pos == std::string::npos || pos < min_pos)) {
                     min_pos = pos;
                     found_token = token_str;
+                } else if (pos == std::string::npos) {
+                    // the special token DNE!
+                    next_special_cache.erase(token_str); // NOTE: this MUST NOT be used in an encoder meant to be streamed.
                 }
-            } else if (v != -1) {  // v is a cached valid index
+            } else {  // v is a cached valid index
                 size_t pos = static_cast<size_t>(v);
                 if (min_pos == std::string::npos || pos < min_pos) {
                     min_pos = pos;
@@ -143,7 +146,7 @@ namespace tiktoken {
         while (true) {
             // find the next allowed special token.
             next_special_token = "";
-            int next_special_token_pos = std::string::npos;
+            int next_special_token_pos = -1;
             int start_offset = start;
             while (true) {
                 auto [pos, token] = find_next_special_token(text, start_offset, next_special_cache);
@@ -155,7 +158,7 @@ namespace tiktoken {
                 next_special_token_pos = pos;
                 break;
             }
-            int end = next_special_token_pos == std::string::npos ? text.length() : next_special_token_pos;
+            int end = next_special_token_pos == -1 ? text.length() : next_special_token_pos;
 
             // now process the text normally, up until the found special token (or the end of the text).
             auto pieces = split_text(text, start, end);
@@ -243,7 +246,7 @@ namespace tiktoken {
             int end_idx = parts[idx+3].first;
             std::vector<unsigned char> pair;
             pair.reserve(end_idx-start_idx);
-            for (size_t i = start_idx; i < end_idx; ++i) {
+            for (int i = start_idx; i < end_idx; ++i) {
                 pair.push_back(piece[i]);
             }
             auto* value_ptr = encoder.try_get(pair);
@@ -306,7 +309,7 @@ namespace tiktoken {
 
             std::vector<unsigned char> pair;
             pair.reserve(end_idx - start_idx);
-            for (size_t j = start_idx; j < end_idx; ++j) {
+            for (int j = start_idx; j < end_idx; ++j) {
                 pair.push_back(piece[j]);
             }
             const auto* value_ptr = encoder.try_get(pair);
