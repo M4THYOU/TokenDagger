@@ -313,12 +313,13 @@ namespace tiktoken {
             if (value_ptr) {
                 result.push_back(*value_ptr);
             } else {
-                printf("No value found for pair: ");
-                for (const auto& byte : pair) {
-                    printf("%d ", byte);
-                }
-                printf("\n");
-                result.push_back(INT_MAX);
+                // printf("No value found for pair: ");
+                // for (const auto& byte : pair) {
+                //     printf("%d ", byte);
+                // }
+                // printf("\n");
+                throw TiktokenError("No value found for pair: " + std::to_string(start_idx) + " " + std::to_string(end_idx));
+                // result.push_back(INT_MAX);
             }
         }
     }
