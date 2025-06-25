@@ -1,74 +1,201 @@
-from transformers import AutoTokenizer
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+import tokendagger
 import time
 
-# prompt = """You are an expert urban planner and cost estimator with deep knowledge of Paris, France. I need you to provide a comprehensive analysis of what it would cost to hire professional window cleaners to clean all the windows in Paris.
+# Create a simple vocabulary for testing
+# In a real scenario, you'd load this from actual tokenizer files
+def create_test_vocab():
+    vocab_data = []
+    
+    # Add basic ASCII characters and common words
+    vocab_items = [
+        # Common punctuation and symbols
+        " ", ".", ",", "!", "?", ":", ";", "'", '"', "-", "(", ")", "[", "]", "{", "}", 
+        "\n", "\t",
+        # Common letters and combinations
+        "a", "e", "i", "o", "u", "t", "n", "s", "r", "h", "l", "d", "c", "m", "f", "p", "g", "w", "y", "b", "v", "k", "x", "j", "q", "z",
+        "A", "E", "I", "O", "U", "T", "N", "S", "R", "H", "L", "D", "C", "M", "F", "P", "G", "W", "Y", "B", "V", "K", "X", "J", "Q", "Z",
+        # Common words
+        "the", "and", "of", "to", "in", "for", "is", "on", "that", "by", "this", "with", "are", "as", "be", "or", "an", "will", "my", "one", "all", "would", "there", "their",
+        "What", "Here", "Python", "JavaScript", "web", "development", "programming", "language", "code", "function", "example", "syntax", "differences",
+        "applications", "backend", "frontend", "beginner", "recommend", "projects", "todo", "list", "script", "html", "css", "react", "node",
+        # Numbers
+        "0", "1", "2", "3", "4", "5", "2024",
+        # Programming-related
+        "def", "if", "else", "for", "while", "class", "import", "from", "return", "print", "console", "log",
+        "**", "##", "```", "python", "javascript", "const", "let", "var", "function",
+    ]
+    
+    for i, item in enumerate(vocab_items):
+        vocab_data.append({
+            "rank": i,
+            "token_bytes": list(item.encode('utf-8')),
+            "token_string": item
+        })
+    
+    return vocab_data
 
-# Consider the following factors in your detailed estimate:
-# 1. The total number of buildings and windows in Paris (both residential and commercial)
-# 2. Different types of buildings (apartments, offices, shops, historical buildings, etc.)
-# 3. The varying heights and accessibility of buildings
-# 4. Labor costs for professional window cleaners in Paris
-# 5. Equipment and safety requirements for high-rise buildings
-# 6. Seasonal variations and weather considerations
-# 7. Time estimates for completion
-# 8. Any special considerations for historical or landmark buildings
+def create_special_tokens():
+    return {
+        "<|begin_of_text|>": 50000,
+        "<|end_of_text|>": 50001,
+        "<|eot|>": 50002,
+        "<s>": 50003,
+        "</s>": 50004,
+        "[INST]": 50005,
+        "[/INST]": 50006,
+    }
 
-# Please provide your estimate in US Dollars, breaking down the major cost components. Also include any assumptions you're making and potential challenges that could affect the final cost."""
+####################################################################################
 
 # Load lorem ipsum text from file
-with open("./input/lorem.txt", "r", encoding="utf-8") as f:
-    prompt = f.read()
+try:
+    with open("./input/lorem.txt", "r", encoding="utf-8") as f:
+        prompt = f.read()
+except FileNotFoundError:
+    # Fallback text if file doesn't exist
+    prompt = "This is a test prompt for tokenization."
 
-# Load LLaMA tokenizer
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-4-Scout-17B-16E-Instruct", use_fast=True)
+# Create TokenDagger tokenizer
+print("Creating TokenDagger tokenizer...")
+try:
+    vocab_data = create_test_vocab()
+    special_tokens = create_special_tokens()
+    
+    tokenizer = tokendagger.create_tokenizer(
+        name="test_tokenizer",
+        pattern=r"[a-zA-Z]+|[0-9]+|[^\w\s]",  # Simple pattern for words, numbers, and punctuation
+        vocab=vocab_data,
+        special_tokens=special_tokens
+    )
+    
+    print(f"✓ TokenDagger tokenizer created successfully!")
+    print(f"  Vocabulary size: {tokenizer.n_vocab}")
+    print(f"  Special tokens: {list(tokenizer.special_tokens_set)}")
+    
+except Exception as e:
+    print(f"✗ Failed to create tokenizer: {e}")
+    sys.exit(1)
 
-# Manual formatting with LLaMA's actual special tokens
+####################################################################################
+
+# Test messages
 user_message = "Please list the top 3 programming languages in 2024."
 assistant_message = "Here are the top 3 programming languages in 2024:\n\n1. **Python**: Widely used for AI/ML\n2. **JavaScript**: Essential for web development\n3. **TypeScript**: Like JS, but with types."
 
 # Use the ACTUAL special tokens (not the chat template format)
 formatted_prompt = f"<|begin_of_text|>{user_message}<|eot|>{assistant_message}<|eot|><|end_of_text|>"
 incorrectly_formatted_prompt = f"<<begin_of_text|>{user_message}<<eot|>{assistant_message}<<eot|><<end_of_text|>"
-prompt_long = "<|begin_of_text|>What are the main differences between Python and JavaScript?<|eot|>Here are the key differences between Python and JavaScript:\n\n**1. Syntax and Readability**\n- Python: Uses indentation for code blocks, very readable\n- JavaScript: Uses curly braces, more C-like syntax\n\n**2. Type System**\n- Python: Dynamically typed with optional type hints\n- JavaScript: Dynamically typed, TypeScript adds static typing\n\n**3. Primary Use Cases**\n- Python: Data science, AI/ML, backend development, automation\n- JavaScript: Web development (frontend/backend), mobile apps\n\n**4. Performance**\n- Python: Generally slower, interpreted language\n- JavaScript: V8 engine makes it quite fast for web applications<|eot|>Can you give me a concrete example of the syntax differences?<|eot|>Absolutely! Here are concrete examples showing the syntax differences:\n\n**Python Example:**\n```python\ndef calculate_factorial(n):\n    if n <= 1:\n        return 1\n    else:\n        return n * calculate_factorial(n - 1)\n\n# Usage\nresult = calculate_factorial(5)\nprint(f\"Factorial of 5 is: {result}\")\n\n# List comprehension\nnumbers = [1, 2, 3, 4, 5]\nsquares = [x**2 for x in numbers if x % 2 == 0]\nprint(squares)  # Output: [4, 16]\n```\n\n**JavaScript Example:**\n```javascript\nfunction calculateFactorial(n) {\n    if (n <= 1) {\n        return 1;\n    } else {\n        return n * calculateFactorial(n - 1);\n    }\n}\n\n// Usage\nconst result = calculateFactorial(5);\nconsole.log(`Factorial of 5 is: ${result}`);\n\n// Array methods\nconst numbers = [1, 2, 3, 4, 5];\nconst squares = numbers.filter(x => x % 2 === 0).map(x => x**2);\nconsole.log(squares); // Output: [4, 16]\n```\n\n**Key Differences Highlighted:**\n- Python uses indentation vs JavaScript's curly braces `{}`\n- Python's `def` vs JavaScript's `function`\n- Python's f-strings vs JavaScript's template literals\n- Python's list comprehensions vs JavaScript's array methods<|eot|>Which one would you recommend for a beginner programmer?<|eot|>For a beginner programmer, I'd generally recommend **Python** for these reasons:\n\n**Why Python is Great for Beginners:**\n\n1. **Readable Syntax**: Python's syntax closely resembles English, making it intuitive\n   ```python\n   if age >= 18:\n       print(\"You can vote!\")\n   ```\n\n2. **Less Boilerplate**: You can write functional programs with minimal setup\n   ```python\n   name = input(\"What's your name? \")\n   print(f\"Hello, {name}!\")\n   ```\n\n3. **Excellent Learning Resources**: Tons of tutorials, books, and courses designed for beginners\n\n4. **Versatile Applications**: Once you learn Python, you can:\n   - Build web applications (Django, Flask)\n   - Analyze data (pandas, NumPy)\n   - Create AI/ML models (TensorFlow, PyTorch)\n   - Automate tasks (scripting)\n   - Develop games (Pygame)\n\n5. **Gentle Learning Curve**: Focus on problem-solving rather than complex syntax\n\n**However, JavaScript might be better if you:**\n- Want to see immediate visual results (web pages)\n- Are specifically interested in web development\n- Prefer learning through interactive projects\n\n**My Recommendation**: Start with Python to learn programming fundamentals, then add JavaScript when you want to build web applications. This gives you a solid foundation plus practical web skills!\n\nWhat type of projects are you most interested in creating?<|eot|>I'm interested in building web applications. Should I still start with Python?<|eot|>Given your interest in web applications, this changes my recommendation! Here's what I'd suggest:\n\n**For Web Development, Consider Starting with JavaScript:**\n\n**Advantages of JavaScript-First for Web Development:**\n1. **Immediate Visual Feedback**: See your changes instantly in the browser\n2. **One Language, Full Stack**: JavaScript works for both frontend and backend (Node.js)\n3. **No Setup Required**: Just open a browser and start coding\n4. **Huge Ecosystem**: React, Vue, Angular for frontend; Express, Next.js for backend\n5. **High Demand**: Web developers are in high demand\n\n**Learning Path for Web Development:**\n```\n1. HTML + CSS (structure and styling)\n2. JavaScript fundamentals\n3. DOM manipulation\n4. Frontend framework (React recommended)\n5. Backend with Node.js/Express\n6. Database integration (MongoDB/PostgreSQL)\n```\n\n**Sample First Project** (you can build this in days):\n```html\n<!DOCTYPE html>\n<html>\n<head><title>Todo App</title></head>\n<body>\n    <h1>My Todo List</h1>\n    <input id=\"todoInput\" placeholder=\"Add a task...\">\n    <button onclick=\"addTodo()\">Add</button>\n    <ul id=\"todoList\"></ul>\n    \n    <script>\n    function addTodo() {\n        const input = document.getElementById('todoInput');\n        const list = document.getElementById('todoList');\n        const li = document.createElement('li');\n        li.textContent = input.value;\n        list.appendChild(li);\n        input.value = '';\n    }\n    </script>\n</body>\n</html>\n```\n\n**Alternative: Python for Web (Still Valid!)**\n- Django/Flask are excellent for web backends\n- Python + JavaScript frontend is a common combination\n- Many successful web companies use Python (Instagram, Spotify, Dropbox)\n\n**My Updated Recommendation**: Start with JavaScript since you want immediate web results, but don't completely ignore Python—you might use it later for backend services, data processing, or AI features in your web apps!\n\nWould you like me to suggest some specific first projects to try?<|eot|><|end_of_text|>"
 
-t0 = time.time()
-tokens = tokenizer.encode(prompt_long)
-t1 = time.time()
-print(f"Time taken: {(t1 - t0) * 1000:.2f}ms")
-print(f"Token count: {len(tokens)}")
-# for token in tokens:
-    # print(token)
+# Shorter test text for initial testing
+test_prompt = "What are the main differences between Python and JavaScript?"
 
-# # Check first few tokens
-# print("\nFirst 10 tokens decoded:")
-# for i, token_id in enumerate(tokens[:10]):
-#     decoded = tokenizer.decode([token_id])
-#     print(f"Token {token_id}: '{decoded}'")
+print("\n" + "="*80)
+print("TOKENIZATION TEST")
+print("="*80)
 
-# # Check special tokens
-# print("Special tokens in tokenizer:")
-# print(f"BOS token: '{tokenizer.bos_token}' -> ID: {tokenizer.bos_token_id}")
-# print(f"EOS token: '{tokenizer.eos_token}' -> ID: {tokenizer.eos_token_id}")
-# print(f"PAD token: '{tokenizer.pad_token}' -> ID: {tokenizer.pad_token_id}")
+# Test 1: Basic encoding
+print(f"\n1. Testing basic encoding:")
+print(f"   Text: '{test_prompt[:50]}...'")
 
-# # Check if [INST] and [/INST] are special tokens
-# special_tokens = tokenizer.special_tokens_map
-# print(f"All special tokens: {special_tokens}")
+try:
+    t0 = time.time()
+    tokens = tokenizer.encode_ordinary(test_prompt)
+    t1 = time.time()
+    
+    print(f"   ✓ Time taken: {(t1 - t0) * 1000:.2f}ms")
+    print(f"   ✓ Token count: {len(tokens)}")
+    print(f"   ✓ First 10 tokens: {tokens[:10]}")
+    
+    # Test decoding
+    decoded = tokenizer.decode(tokens)
+    print(f"   ✓ Decoded matches: {decoded == test_prompt}")
+    print(decoded)
+    
+except Exception as e:
+    print(f"   ✗ Encoding failed: {e}")
 
-# # Tokenize individual special tokens
-# print("\nIndividual token IDs:")
-# print(f"<s> -> {tokenizer.encode('<s>', add_special_tokens=False)}")
-# print(f"[INST] -> {tokenizer.encode('[INST]', add_special_tokens=False)}")
-# print(f"[/INST] -> {tokenizer.encode('[/INST]', add_special_tokens=False)}")
-# print(f"</s> -> {tokenizer.encode('</s>', add_special_tokens=False)}")
+####################################################################################
 
-# # Decode first few tokens to see what they are
-# print("\nFirst 10 tokens decoded:")
-# for i, token_id in enumerate(tokens[:10]):
-#     decoded = tokenizer.decode([token_id])
-#     print(f"Token {token_id}: '{decoded}'")
+# # Test 2: Special token handling
+# print(f"\n2. Testing special token handling:")
+# print(f"   Text: '{formatted_prompt[:50]}...'")
 
-# print("\nLast 5 tokens decoded:")
-# for i, token_id in enumerate(tokens[-5:]):
-#     decoded = tokenizer.decode([token_id])
-#     print(f"Token {token_id}: '{decoded}'")
+# try:
+#     # Test with special tokens allowed
+#     t0 = time.time()
+#     tokens_with_special = tokenizer.encode(
+#         formatted_prompt, 
+#         allowed_special={"<|begin_of_text|>", "<|eot|>", "<|end_of_text|>"}
+#     )
+#     t1 = time.time()
+    
+#     print(f"   ✓ Time taken: {(t1 - t0) * 1000:.2f}ms")
+#     print(f"   ✓ Token count with special: {len(tokens_with_special)}")
+#     print(f"   ✓ First 10 tokens: {tokens_with_special[:10]}")
+    
+#     # Test decoding
+#     decoded_special = tokenizer.decode(tokens_with_special)
+#     print(f"   ✓ Contains special tokens: {'<|begin_of_text|>' in decoded_special}")
+    
+# except Exception as e:
+#     print(f"   ✗ Special token encoding failed: {e}")
+
+####################################################################################
+
+# # Test 3: Error handling for disallowed special tokens
+# print(f"\n3. Testing disallowed special token handling:")
+
+# try:
+#     # This should raise an error
+#     tokens_error = tokenizer.encode(formatted_prompt)  # No special tokens allowed by default
+#     print(f"   ✗ Should have raised an error but didn't!")
+    
+# except ValueError as e:
+#     print(f"   ✓ Correctly caught disallowed special token: {str(e)[:100]}...")
+    
+# except Exception as e:
+#     print(f"   ✗ Unexpected error: {e}")
+
+####################################################################################
+
+# # Test 4: Performance comparison (if we have a longer text)
+# if len(prompt) > 100:
+#     print(f"\n4. Testing with longer text ({len(prompt)} characters):")
+    
+#     try:
+#         t0 = time.time()
+#         long_tokens = tokenizer.encode_ordinary(prompt[:1000])  # First 1000 chars to avoid issues
+#         t1 = time.time()
+        
+#         print(f"   ✓ Time taken: {(t1 - t0) * 1000:.2f}ms")
+#         print(f"   ✓ Token count: {len(long_tokens)}")
+#         print(f"   ✓ Tokens per character: {len(long_tokens) / 1000:.2f}")
+        
+#     except Exception as e:
+#         print(f"   ✗ Long text encoding failed: {e}")
+
+####################################################################################
+
+# print(f"\n5. Tokenizer information:")
+# print(f"   Name: {tokenizer.name}")
+# print(f"   Vocabulary size: {tokenizer.n_vocab}")
+# print(f"   Max token value: {tokenizer.max_token_value}")
+# print(f"   Special tokens: {len(tokenizer.special_tokens_set)}")
+
+# # Show some token examples
+# if len(tokens) > 0:
+#     print(f"\n6. Token examples:")
+#     for i, token_id in enumerate(tokens[:5]):
+#         try:
+#             decoded_token = tokenizer.decode([token_id])
+#             print(f"   Token {token_id}: '{decoded_token}'")
+#         except:
+#             print(f"   Token {token_id}: <decode error>")
+
+print("\n" + "="*80)
+print("TEST COMPLETE")
+print("="*80)

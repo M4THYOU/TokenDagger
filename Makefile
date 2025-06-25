@@ -36,7 +36,8 @@ PYTHON_SOURCES = src/py_binding.cpp
 
 # Output targets
 TARGET = main
-PYTHON_MODULE = tokendagger$(shell python3-config --extension-suffix)
+PYTHON_MODULE_NAME = _tokendagger_core$(shell python3-config --extension-suffix)
+PYTHON_MODULE_PATH = tokendagger/$(PYTHON_MODULE_NAME)
 
 # Default target (release build)
 all: $(TARGET)
@@ -53,7 +54,11 @@ profile: CXX_FLAGS = $(CXX_FLAGS_PROFILE)
 profile: $(TARGET)
 
 # Python module build
-python: $(PYTHON_MODULE)
+python: $(PYTHON_MODULE_PATH)
+
+# Create tokendagger directory if it doesn't exist
+tokendagger:
+	mkdir -p tokendagger
 
 # Build the tiktoken library first
 $(TIKTOKEN_LIB):
@@ -63,10 +68,10 @@ $(TIKTOKEN_LIB):
 $(TARGET): $(CPP_SOURCES) $(TIKTOKEN_LIB)
 	$(CXX) $(CXX_FLAGS) $(INCLUDES) -o $(TARGET) $(CPP_SOURCES) $(TIKTOKEN_LIB) $(LIBS)
 
-# Build the Python module (shared library)
-$(PYTHON_MODULE): $(PYTHON_SOURCES) $(TIKTOKEN_LIB)
+# Build the Python module (shared library) and place it in the package directory
+$(PYTHON_MODULE_PATH): $(PYTHON_SOURCES) $(TIKTOKEN_LIB) tokendagger
 	$(CXX) $(CXX_FLAGS) $(INCLUDES) $(PYBIND11_INCLUDES) $(PYTHON_INCLUDES) \
-		-shared -o $(PYTHON_MODULE) $(PYTHON_SOURCES) $(TIKTOKEN_LIB) $(LIBS)
+		-shared -o $(PYTHON_MODULE_PATH) $(PYTHON_SOURCES) $(TIKTOKEN_LIB) $(LIBS)
 
 # Alternative: Build with separate compilation (if you need more complex builds)
 $(TARGET)-alt: main.o $(TIKTOKEN_LIB)
@@ -77,7 +82,7 @@ main.o: $(CPP_SOURCES)
 
 # Clean build artifacts (including tiktoken)
 clean:
-	rm -f $(TARGET) $(PYTHON_MODULE) *.o
+	rm -f $(TARGET) tokendagger/*.so *.o
 	$(MAKE) -C src/tiktoken clean
 
 # Clean only main project
@@ -90,18 +95,22 @@ clean-tiktoken:
 
 # Clean only Python module
 clean-python:
-	rm -f $(PYTHON_MODULE)
+	rm -f tokendagger/*.so
 
 # Test the executable
 test: $(TARGET)
 	./$(TARGET)
 
 # Test the Python module
-test-python: $(PYTHON_MODULE)
-	python3 -c "import tokendagger; print('Python module loaded successfully')"
+test-python: python
+	python3 -c "import tokendagger; print('TokenDagger package loaded successfully')"
+
+# Test the high-level wrapper
+test-wrapper: python
+	python3 -c "from tokendagger import Tokenizer; print('TokenDagger wrapper loaded successfully')"
 
 # Debug with GDB
 gdb: debug
 	gdb ./$(TARGET)
 
-.PHONY: all release debug profile python clean clean-main clean-tiktoken clean-python test test-python gdb
+.PHONY: all release debug profile python tokendagger clean clean-main clean-tiktoken clean-python test test-python test-wrapper gdb

@@ -4,8 +4,8 @@
 #include "tiktoken/tiktoken.hpp"
 // Include your tokenizer headers here
 
-PYBIND11_MODULE(tokendagger, m) {
-    m.doc() = "TokenDagger Python bindings for tiktoken";
+PYBIND11_MODULE(_tokendagger_core, m) {
+    m.doc() = "TokenDagger low-level C++ bindings for tiktoken";
     
     // Bind VocabItem struct
     pybind11::class_<VocabItem>(m, "VocabItem")
@@ -25,9 +25,15 @@ PYBIND11_MODULE(tokendagger, m) {
         .def("encode_ordinary", &tiktoken::CoreBPE::encode_ordinary,
              "Encode text using ordinary BPE tokens only",
              pybind11::arg("text"))
-        .def("encode", &tiktoken::CoreBPE::encode,
-             "Encode text with allowed special tokens",
-             pybind11::arg("text"), pybind11::arg("allowed_special"))
+        .def("encode", [](tiktoken::CoreBPE& self, const std::string& text, const std::set<std::string>& allowed_special) {
+            // Convert std::set to emhash8::HashSet
+            emhash8::HashSet<std::string> allowed_set;
+            for (const auto& token : allowed_special) {
+                allowed_set.insert(token);
+            }
+            return self.encode(text, allowed_set);
+        }, "Encode text with allowed special tokens",
+           pybind11::arg("text"), pybind11::arg("allowed_special"))
         .def("decode_bytes", &tiktoken::CoreBPE::decode_bytes,
              "Decode tokens back to bytes",
              pybind11::arg("tokens"))
