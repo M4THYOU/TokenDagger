@@ -68,13 +68,13 @@ namespace tiktoken {
         
         // BPE-specific methods
         std::vector<int> encode_ordinary(const std::string& text) const;
-        std::pair<std::vector<int>, int> encode(const std::string& text, const emhash8::HashSet<std::string>& allowed_special) const;
+        std::pair<std::vector<int>, int> encode(const std::string& text, const emhash8::HashSet<std::string>& allowed_special);
         std::vector<unsigned char> decode(const std::vector<int>& tokens) const;
         
     private:
         // [start_offset, end_offset). Caller is responsible for ensuring that end_offset is <= text.length().
         std::vector<std::string> split_text(const std::string& text, const size_t start_offset, const size_t end_offset) const;
-        std::pair<size_t, std::string> find_next_special_token(const std::string& text, size_t start_pos, const emhash8::HashSet<std::string>& special_vocab) const;
+        std::pair<size_t, std::string> find_next_special_token(const std::string& text, size_t start_pos, emhash8::HashMap<std::string, int>& next_special_cache);
         bool init_regex(const std::string& pattern);
     };
 

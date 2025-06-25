@@ -86,14 +86,24 @@ namespace tiktoken {
         return pieces;
     }
 
-    std::pair<size_t, std::string> CoreBPE::find_next_special_token(const std::string& text, size_t start_pos, const emhash8::HashSet<std::string>& special_vocab) const {
+    std::pair<size_t, std::string> CoreBPE::find_next_special_token(const std::string& text, size_t start_pos, emhash8::HashMap<std::string, int>& next_special_cache) {
         size_t min_pos = std::string::npos;
         std::string found_token;
-        for (const auto& token_str : special_vocab) {
-            size_t pos = text.find(token_str, start_pos);
-            if (pos != std::string::npos && (min_pos == std::string::npos || pos < min_pos)) {
-                min_pos = pos;
-                found_token = token_str;
+        for (auto& [token_str, v] : next_special_cache) {  // Note: auto& not const auto&
+            if (v < static_cast<int>(start_pos)) { // Fix sign comparison too
+                // v has been passed! need to search for it again.
+                size_t pos = text.find(token_str, start_pos);
+                v = (pos == std::string::npos) ? -1 : static_cast<int>(pos);  // Update cache here
+                if (pos != std::string::npos && (min_pos == std::string::npos || pos < min_pos)) {
+                    min_pos = pos;
+                    found_token = token_str;
+                }
+            } else if (v != -1) {  // v is a cached valid index
+                size_t pos = static_cast<size_t>(v);
+                if (min_pos == std::string::npos || pos < min_pos) {
+                    min_pos = pos;
+                    found_token = token_str;
+                }
             }
         }
         return {min_pos, found_token};
@@ -112,15 +122,19 @@ namespace tiktoken {
         return result;
     }
 
-    std::pair<std::vector<int>, int> CoreBPE::encode(const std::string& text, const emhash8::HashSet<std::string>& allowed_special) const {
+    std::pair<std::vector<int>, int> CoreBPE::encode(const std::string& text, const emhash8::HashSet<std::string>& allowed_special) {
         std::vector<int> result;
         result.reserve(text.length());
 
         // Validate that all allowed_special tokens exist in special_encoder
+        // also initialize the next_special_cache with -1.
+        emhash8::HashMap<std::string, int> next_special_cache;
+        next_special_cache.reserve(allowed_special.size());
         for (const auto& special_token : allowed_special) {
             if (special_encoder.find(special_token) == special_encoder.end()) {
                 throw TiktokenError("Special token '" + special_token + "' not found in special encoder");
             }
+            next_special_cache.emplace_unique(special_token, -1);
         }
 
         int start = 0;
@@ -132,7 +146,7 @@ namespace tiktoken {
             int next_special_token_pos = std::string::npos;
             int start_offset = start;
             while (true) {
-                auto [pos, token] = find_next_special_token(text, start_offset, allowed_special);
+                auto [pos, token] = find_next_special_token(text, start_offset, next_special_cache);
                 if (pos == std::string::npos) { // not found, no more special tokens.
                     break;
                 }
