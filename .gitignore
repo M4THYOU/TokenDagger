@@ -53,7 +53,6 @@ x86/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
-Makefile
 
 # OS generated files
 .DS_Store
