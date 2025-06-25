@@ -70,6 +70,8 @@ namespace tiktoken {
         std::vector<int> encode_ordinary(const std::string& text) const;
         std::pair<std::vector<int>, int> encode(const std::string& text, const emhash8::HashSet<std::string>& allowed_special);
         std::vector<unsigned char> decode(const std::vector<int>& tokens) const;
+        std::vector<std::string> special_tokens() const;
+        std::vector<int> encode_with_special_tokens(const std::string& text);
         
     private:
         // [start_offset, end_offset). Caller is responsible for ensuring that end_offset is <= text.length().

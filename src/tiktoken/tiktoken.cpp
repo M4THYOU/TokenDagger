@@ -211,6 +211,31 @@ namespace tiktoken {
         // return ret;
     }
 
+
+    std::vector<std::string> CoreBPE::special_tokens() const {
+        std::vector<std::string> result;
+        result.reserve(special_encoder.size());
+        for (const auto& pair : special_encoder) {
+            result.push_back(pair.first);
+        }
+        return result;
+    }
+
+    // probably shouldn't use this function. Better for the caller to _know_ which special tokens are allowed and make that explicit.
+    std::vector<int> CoreBPE::encode_with_special_tokens(const std::string& text) {
+        emhash8::HashSet<std::string> allowed_special;
+        auto special_tokens_vec = special_tokens();
+        allowed_special.reserve(special_tokens_vec.size());
+        for (const auto& token : special_tokens_vec) {
+            allowed_special.emplace(token);
+        }
+        return encode(text, allowed_special).first;
+    }
+
+    //////////////////////////////////////////////////////////////
+    // BPE implementation
+    //////////////////////////////////////////////////////////////
+
     int get_rank(const std::vector<unsigned char>& piece, const emhash8::HashMap<std::vector<unsigned char>, int, VectorHashEmhash>& encoder, const std::vector<std::pair<size_t, int>>& parts, size_t idx) {
         if ((idx+3) < parts.size()) {
             // need to extract the bytes from piece. And check if they exist in the encoder.
