@@ -138,6 +138,11 @@ void LoadTokenizer(const std::string& tokenizer_path, const std::string& bpe_pat
 
 
 void Tokenize(const Llama4Tokenizer& tokenizer, const std::string& prompt) {
+    // Perform 5 warmup runs
+    for (int i = 0; i < 5; i++) {
+        tokenizer.encode(prompt);
+    }
+
     auto start_time = std::chrono::high_resolution_clock::now();
     std::vector<int> tokens = tokenizer.encode(prompt);
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -150,7 +155,7 @@ void Tokenize(const Llama4Tokenizer& tokenizer, const std::string& prompt) {
 
     // decode the tokens.
     std::vector<unsigned char> decoded_bytes = tokenizer.bpe->decode_bytes(tokens);
-    printf("Decoded bytes: %s\n", decoded_bytes.data());
+    // printf("Decoded bytes: %s\n", decoded_bytes.data());
 
     std::vector<int> times;
     for (int i = 0; i < 10000; i++) {
@@ -176,8 +181,8 @@ void Tokenize(const Llama4Tokenizer& tokenizer, const std::string& prompt) {
 
 int main() {
     // build the tokenizer.
-    std::string tokenizer_path = "/home/ubuntu/fs1-kikashi/TokenDagger/src/tokenizer_config.json";
-    std::string bpe_file_path = "/home/ubuntu/fs1-kikashi/TokenDagger/src/tokenizer.model";
+    std::string tokenizer_path = "/home/ubuntu/TokenDagger/src/tokenizer_config.json";
+    std::string bpe_file_path = "/home/ubuntu/TokenDagger/src/tokenizer.model";
     Llama4Tokenizer tokenizer;
     LoadTokenizer(tokenizer_path, bpe_file_path, tokenizer);
 

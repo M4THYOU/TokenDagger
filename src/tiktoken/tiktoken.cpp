@@ -207,7 +207,6 @@ namespace tiktoken {
                 } else {
                     throw TiktokenError("Invalid token for decoding: " + std::to_string(token));
                 }
-                printf("special token: %s\n", token_bytes.data());
             }
             ret.insert(ret.end(), token_bytes.begin(), token_bytes.end());
         }
