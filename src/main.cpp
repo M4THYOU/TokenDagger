@@ -128,7 +128,7 @@ void LoadTokenizer(const std::string& tokenizer_path, const std::string& bpe_pat
         VocabItem item;
         item.rank = std::stoi(token_str);
         item.token_string = special_token.content;
-        item.token_bytes = std::vector<unsigned char>(token_str.begin(), token_str.end());
+        item.token_bytes = std::vector<unsigned char>(special_token.content.begin(), special_token.content.end());
         special_vocab.push_back(item);
     }
 
@@ -147,6 +147,10 @@ void Tokenize(const Llama4Tokenizer& tokenizer, const std::string& prompt) {
     // for (size_t i = 0; i < tokens.size(); i++) {
     //     printf("%d\n", tokens[i]);
     // }
+
+    // decode the tokens.
+    std::vector<unsigned char> decoded_bytes = tokenizer.bpe->decode_bytes(tokens);
+    printf("Decoded bytes: %s\n", decoded_bytes.data());
 
     std::vector<int> times;
     for (int i = 0; i < 10000; i++) {

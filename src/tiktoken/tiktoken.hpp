@@ -40,6 +40,8 @@ namespace tiktoken {
         // Replace std::unordered_map with emhash8::HashMap
         emhash8::HashMap<std::vector<unsigned char>, int, VectorHashEmhash> encoder;
         emhash8::HashMap<std::string, int> special_encoder;
+        emhash8::HashMap<int, std::vector<unsigned char>> decoder;
+        emhash8::HashMap<int, std::vector<unsigned char>> special_tokens_decoder;
         pcre2_code* regex_pattern = nullptr;
         pcre2_match_data* match_data = nullptr;
 
@@ -53,6 +55,14 @@ namespace tiktoken {
             special_encoder.reserve(special_vocab.size()*1.5);
             for (const auto& item : special_vocab) {
                 special_encoder.emplace_unique(item.token_string, item.rank);
+            }
+            decoder.reserve(vocab.size()*1.5);
+            for (const auto& item : vocab) {
+                decoder.emplace_unique(item.rank, item.token_bytes);
+            }
+            special_tokens_decoder.reserve(special_vocab.size()*1.5);
+            for (const auto& item : special_vocab) {
+                special_tokens_decoder.emplace_unique(item.rank, item.token_bytes);
             }
             init_regex(pattern);
         }
@@ -69,7 +79,7 @@ namespace tiktoken {
         // BPE-specific methods
         std::vector<int> encode_ordinary(const std::string& text) const;
         std::pair<std::vector<int>, int> encode(const std::string& text, const emhash8::HashSet<std::string>& allowed_special);
-        std::vector<unsigned char> decode(const std::vector<int>& tokens) const;
+        std::vector<unsigned char> decode_bytes(const std::vector<int>& tokens) const;
         std::vector<std::string> special_tokens() const;
         std::vector<int> encode_with_special_tokens(const std::string& text);
         

@@ -189,26 +189,26 @@ namespace tiktoken {
         return {result, last_piece_token_len};
     }
 
-    std::vector<unsigned char> CoreBPE::decode(const std::vector<int>& tokens) const {
-        // TODO: implement after encode is fully implemented.
-        // std::vector<unsigned char> ret;
-        // ret.reserve(tokens.size() * 2);
-        // for (int token : tokens) {
-        //     std::vector<unsigned char> token_bytes;
-        //     auto it = decoder.find(token);
-        //     if (it != decoder.end()) {
-        //         token_bytes = it->second;
-        //     } else {
-        //         auto special_it = special_tokens_decoder.find(token);
-        //         if (special_it != special_tokens_decoder.end()) {
-        //             token_bytes = special_it->second;
-        //         } else {
-        //             throw TiktokenError("Invalid token for decoding: " + std::to_string(token));
-        //         }
-        //     }
-        //     ret.insert(ret.end(), token_bytes.begin(), token_bytes.end());
-        // }
-        // return ret;
+    std::vector<unsigned char> CoreBPE::decode_bytes(const std::vector<int>& tokens) const {
+        std::vector<unsigned char> ret;
+        ret.reserve(tokens.size() * 2);
+        for (int token : tokens) {
+            std::vector<unsigned char> token_bytes;
+            auto it = decoder.find(token);
+            if (it != decoder.end()) {
+                token_bytes = it->second;
+            } else {
+                auto special_it = special_tokens_decoder.find(token);
+                if (special_it != special_tokens_decoder.end()) {
+                    token_bytes = special_it->second;
+                } else {
+                    throw TiktokenError("Invalid token for decoding: " + std::to_string(token));
+                }
+                printf("special token: %s\n", token_bytes.data());
+            }
+            ret.insert(ret.end(), token_bytes.begin(), token_bytes.end());
+        }
+        return ret;
     }
 
 
