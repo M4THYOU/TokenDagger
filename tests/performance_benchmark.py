@@ -349,19 +349,19 @@ int main() {
         # Warmup runs
         for _ in range(self.warmup_runs):
             try:
-                self.tokendagger_tokenizer.encode(text, allowed_special="all", disallowed_special=set())
-                self.tiktoken_tokenizer.encode(text, allowed_special="all", disallowed_special=set())
+                self.tokendagger_tokenizer.encode(text, allowed_special=set(), disallowed_special=set())
+                self.tiktoken_tokenizer.encode(text, allowed_special=set(), disallowed_special=set())
             except Exception as e:
                 print(f"Warning: Warmup failed for {test_name}: {e}")
                 break
         
         # Get token count for metrics
         try:
-            tokens = self.tokendagger_tokenizer.encode(text, allowed_special="all", disallowed_special=set())
+            tokens = self.tokendagger_tokenizer.encode(text, allowed_special=set(), disallowed_special=set())
             token_count = len(tokens)
         except Exception:
             try:
-                tokens = self.tiktoken_tokenizer.encode(text, allowed_special="all", disallowed_special=set())
+                tokens = self.tiktoken_tokenizer.encode(text, allowed_special=set(), disallowed_special=set())
                 token_count = len(tokens)
             except Exception:
                 token_count = 0
@@ -371,7 +371,7 @@ int main() {
         for _ in range(self.benchmark_runs):
             start_time = time.perf_counter()
             try:
-                self.tokendagger_tokenizer.encode(text, allowed_special="all", disallowed_special=set())
+                self.tokendagger_tokenizer.encode(text, allowed_special=set(), disallowed_special=set())
                 end_time = time.perf_counter()
                 tokendagger_times.append(end_time - start_time)
             except Exception as e:
@@ -383,7 +383,7 @@ int main() {
         for _ in range(self.benchmark_runs):
             start_time = time.perf_counter()
             try:
-                self.tiktoken_tokenizer.encode(text, allowed_special="all", disallowed_special=set())
+                self.tiktoken_tokenizer.encode(text, allowed_special=set(), disallowed_special=set())
                 end_time = time.perf_counter()
                 tiktoken_times.append(end_time - start_time)
             except Exception as e:
