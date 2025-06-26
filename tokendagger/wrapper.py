@@ -139,7 +139,7 @@ class Tokenizer:
         text: str,
         *,
         allowed_special: Literal["all"] | AbstractSet[str] = set(),
-        disallowed_special: Literal["all"] | Collection[str] = "all",
+        disallowed_special: Literal["all"] | Collection[str] = set(),
     ) -> list[int]:
         """Encode text with special token handling.
         
