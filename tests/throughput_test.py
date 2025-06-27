@@ -31,15 +31,11 @@ from dataclasses import dataclass
 import tiktoken
 
 # Import matplotlib for SVG generation
-try:
-    import matplotlib.pyplot as plt
-    import matplotlib
-    matplotlib.use('Agg')  # Use non-interactive backend
-    import numpy as np
-    HAS_MATPLOTLIB = True
-except ImportError:
-    print("Warning: matplotlib not available. SVG generation will be disabled.")
-    HAS_MATPLOTLIB = False
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import numpy as np
+HAS_MATPLOTLIB = True
 
 try:
     from tokendagger import wrapper as tokendagger
