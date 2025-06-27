@@ -4,14 +4,17 @@ Rigorous performance comparison between TokenDagger and TikToken.
 Tests various edge cases, input lengths, and tokenization scenarios.
 
 Usage:
-# Full benchmark (100 runs each)
+# Full benchmark (100 runs each) with Llama tokenizer
 python tests/performance_benchmark.py
+
+# Full benchmark with Mistral tokenizer
+python tests/performance_benchmark.py --tokenizer mistral
 
 # Quick benchmark (10 runs each)
 python tests/performance_benchmark.py --quick
 
-# Custom run counts
-python tests/performance_benchmark.py --warmup 3 --runs 50
+# Custom run counts with specific tokenizer
+python tests/performance_benchmark.py --warmup 3 --runs 50 --tokenizer mistral
 """
 
 import os
@@ -62,12 +65,17 @@ class BenchmarkResult:
 class PerformanceBenchmark:
     """Comprehensive performance benchmark suite."""
     
-    def __init__(self, warmup_runs: int = 5, benchmark_runs: int = 100):
+    def __init__(self, warmup_runs: int = 5, benchmark_runs: int = 100, tokenizer_type: str = "llama"):
         self.src_dir = Path(__file__).parent.parent / "src"
         self.test_dir = Path(__file__).parent
         self.warmup_runs = warmup_runs
         self.benchmark_runs = benchmark_runs
+        self.tokenizer_type = tokenizer_type.lower()
         self.results: List[BenchmarkResult] = []
+        
+        # Validate tokenizer type
+        if self.tokenizer_type not in ["llama", "mistral"]:
+            raise ValueError(f"Invalid tokenizer type: {tokenizer_type}. Must be 'llama' or 'mistral'")
         
     def load_llama_config(self) -> Tuple[str, List[Dict[str, Any]], Dict[str, int]]:
         """Load Llama 4 configuration from the codebase."""
@@ -81,6 +89,53 @@ class PerformanceBenchmark:
         special_tokens = self.load_special_tokens()
         
         return pattern, vocab, special_tokens
+    
+    def load_mistral_config(self) -> Tuple[str, List[Dict[str, Any]], Dict[str, int]]: 
+        """
+        Load Mistral's Tekken 7 configuration from the codebase.
+        
+        Odd notes about Mistral and Tekken configs.
+        tekken.json includes two notable fields: 
+            - default_vocab_size: the size of the vocabulary
+            - default_num_special_tokens: the number of special tokens
+        So while the full vocab is about size 150k, the default vocab is ~131k.
+        Also, the special tokens are intended to be the first 1k ranks.
+        
+        So the actual used vocab is the first 130k ranks. Which are then offset by +1k to account for the special tokens.
+        
+        Then, the actual special tokens are not tokenized by the internal tokenizer (Tiktoken or TokenDagger). But handled manually by the wrapper class.
+        
+        This loader handles the offsets/truncation. And does not load in the special tokens, for a more fair benchmark between the two tokenizers.
+        """
+        config_file = self.test_dir / "configs" / "mistral3.2" / "tekken.json"
+        if not config_file.exists():
+            raise FileNotFoundError(f"Tekken config file not found: {config_file}")
+        
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Extract pattern from config
+        pattern = config["config"]["pattern"]
+        
+        # Extract vocabulary
+        vocab = []
+        max_vocab = config["config"]["default_vocab_size"] - config["config"]["default_num_special_tokens"]
+        for i in range(max_vocab):
+            vocab.append({
+                "rank": i + config["config"]["default_num_special_tokens"],
+                "token_bytes": list(base64.b64decode(config["vocab"][i]["token_bytes"])),  # Convert bytes to list of ints
+                "token_string": config["vocab"][i].get("token_str", "") or ""  # Ensure it's always a string, never None
+            })
+        
+        # Extract special tokens
+        special_tokens = {}
+        # oh wait, we don't need special tokens for the benchmark.
+        # for item in config["special_tokens"]:
+        #     special_tokens[item["token_str"]] = item["rank"]
+        
+        print(f"Loaded {len(vocab)} vocabulary items and {len(special_tokens)} special tokens from tekken.json")
+        return pattern, vocab, special_tokens
+        
     
     def load_bpe_vocab(self) -> List[Dict[str, Any]]:
         """Load vocabulary from tokenizer.model file."""
@@ -137,22 +192,35 @@ class PerformanceBenchmark:
         """Initialize both tokenizers with identical configuration."""
         print("Setting up tokenizers...")
         
-        # Load Llama config
-        pattern, vocab, special_tokens = self.load_llama_config()
+        # Load configuration based on tokenizer type
+        if self.tokenizer_type == "llama":
+            print("Using Llama 4 configuration...")
+            pattern, vocab, special_tokens = self.load_llama_config()
+        elif self.tokenizer_type == "mistral":
+            print("Using Mistral Tekken 7 configuration...")
+            pattern, vocab, special_tokens = self.load_mistral_config()
+        else:
+            raise ValueError(f"Unsupported tokenizer type: {self.tokenizer_type}")
         
         # Initialize TokenDagger
+        tokenizer_name = f"{self.tokenizer_type}_perf_test"
         self.tokendagger_tokenizer = tokendagger.create_tokenizer(
-            name="llama4_perf_test",
+            name=tokenizer_name,
             pattern=pattern,
             vocab=vocab,
             special_tokens=special_tokens
         )
         
-        # Initialize TikToken with the same Llama 4 vocab
+        # Initialize TikToken with the same vocab
         # Convert vocab format for TikToken
         tiktoken_vocab = {}
         for item in vocab:
-            token_bytes = bytes(item["token_bytes"])
+            if isinstance(item["token_bytes"], list):
+                # Convert list to bytes for mistral config
+                token_bytes = bytes(item["token_bytes"])
+            else:
+                # Already bytes for llama config
+                token_bytes = item["token_bytes"]
             tiktoken_vocab[token_bytes] = item["rank"]
         
         # Add special tokens to vocab
@@ -161,14 +229,14 @@ class PerformanceBenchmark:
         
         # Create TikToken encoding with the same vocab
         self.tiktoken_tokenizer = tiktoken.Encoding(
-            name="llama4_perf_test",
+            name=tokenizer_name,
             pat_str=pattern,
             mergeable_ranks=tiktoken_vocab,
             special_tokens=special_tokens
         )
         
-        print(f"✓ TokenDagger tokenizer initialized")
-        print(f"✓ TikToken tokenizer initialized")
+        print(f"✓ TokenDagger tokenizer initialized ({self.tokenizer_type})")
+        print(f"✓ TikToken tokenizer initialized ({self.tokenizer_type})")
     
     def generate_test_texts(self) -> Dict[str, List[str]]:
         """Generate comprehensive test corpus with various edge cases."""
@@ -567,6 +635,8 @@ def main():
     parser.add_argument("--warmup", type=int, default=5, help="Number of warmup runs")
     parser.add_argument("--runs", type=int, default=100, help="Number of benchmark runs")
     parser.add_argument("--quick", action="store_true", help="Run quick benchmark (fewer runs)")
+    parser.add_argument("--tokenizer", choices=["llama", "mistral"], default="llama", 
+                       help="Tokenizer configuration to use (default: llama)")
     
     args = parser.parse_args()
     
@@ -574,7 +644,11 @@ def main():
         args.warmup = 2
         args.runs = 10
     
-    benchmark = PerformanceBenchmark(warmup_runs=args.warmup, benchmark_runs=args.runs)
+    benchmark = PerformanceBenchmark(
+        warmup_runs=args.warmup, 
+        benchmark_runs=args.runs, 
+        tokenizer_type=args.tokenizer
+    )
     success = benchmark.run_full_benchmark()
     
     sys.exit(0 if success else 1)

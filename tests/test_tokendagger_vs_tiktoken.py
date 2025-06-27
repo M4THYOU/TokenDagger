@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
 Test TokenDagger against TikToken for correctness comparison.
-Uses Llama 4 configuration from the codebase.
+
+Usage:
+# Test with Llama tokenizer (default)
+python tests/test_tokendagger_vs_tiktoken.py
+
+# Test with Mistral tokenizer
+python tests/test_tokendagger_vs_tiktoken.py --tokenizer mistral
 """
 
 import os
@@ -29,10 +35,15 @@ except ImportError as e:
 class TokenDaggerVsTikTokenTest:
     """Test suite comparing TokenDagger and TikToken tokenization."""
     
-    def __init__(self):
+    def __init__(self, tokenizer_type: str = "llama"):
         self.src_dir = Path(__file__).parent.parent / "src"
         self.test_dir = Path(__file__).parent
+        self.tokenizer_type = tokenizer_type.lower()
         self.errors = []
+        
+        # Validate tokenizer type
+        if self.tokenizer_type not in ["llama", "mistral"]:
+            raise ValueError(f"Invalid tokenizer type: {tokenizer_type}. Must be 'llama' or 'mistral'")
         
     def load_llama_config(self) -> Tuple[str, List[Dict[str, Any]], Dict[str, int]]:
         """Load Llama 4 configuration from the codebase."""
@@ -45,6 +56,52 @@ class TokenDaggerVsTikTokenTest:
         # Load special tokens from tokenizer_config.json
         special_tokens = self.load_special_tokens()
         
+        return pattern, vocab, special_tokens
+    
+    def load_mistral_config(self) -> Tuple[str, List[Dict[str, Any]], Dict[str, int]]: 
+        """
+        Load Mistral's Tekken 7 configuration from the codebase.
+        
+        Odd notes about Mistral and Tekken configs.
+        tekken.json includes two notable fields: 
+            - default_vocab_size: the size of the vocabulary
+            - default_num_special_tokens: the number of special tokens
+        So while the full vocab is about size 150k, the default vocab is ~131k.
+        Also, the special tokens are intended to be the first 1k ranks.
+        
+        So the actual used vocab is the first 130k ranks. Which are then offset by +1k to account for the special tokens.
+        
+        Then, the actual special tokens are not tokenized by the internal tokenizer (Tiktoken or TokenDagger). But handled manually by the wrapper class.
+        
+        This loader handles the offsets/truncation. And does not load in the special tokens, for a more fair benchmark between the two tokenizers.
+        """
+        config_file = self.test_dir / "configs" / "mistral3.2" / "tekken.json"
+        if not config_file.exists():
+            raise FileNotFoundError(f"Tekken config file not found: {config_file}")
+        
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Extract pattern from config
+        pattern = config["config"]["pattern"]
+        
+        # Extract vocabulary
+        vocab = []
+        max_vocab = config["config"]["default_vocab_size"] - config["config"]["default_num_special_tokens"]
+        for i in range(max_vocab):
+            vocab.append({
+                "rank": i + config["config"]["default_num_special_tokens"],
+                "token_bytes": list(base64.b64decode(config["vocab"][i]["token_bytes"])),  # Convert bytes to list of ints
+                "token_string": config["vocab"][i].get("token_str", "") or ""  # Ensure it's always a string, never None
+            })
+        
+        # Extract special tokens
+        special_tokens = {}
+        # oh wait, we don't need special tokens for the benchmark.
+        # for item in config["special_tokens"]:
+        #     special_tokens[item["token_str"]] = item["rank"]
+        
+        print(f"Loaded {len(vocab)} vocabulary items and {len(special_tokens)} special tokens from tekken.json")
         return pattern, vocab, special_tokens
     
     def load_bpe_vocab(self) -> List[Dict[str, Any]]:
@@ -102,22 +159,35 @@ class TokenDaggerVsTikTokenTest:
     def setup_tokenizers(self):
         """Initialize both tokenizers."""
         try:
-            # Load Llama config
-            pattern, vocab, special_tokens = self.load_llama_config()
+            # Load configuration based on tokenizer type
+            if self.tokenizer_type == "llama":
+                print("Using Llama 4 configuration...")
+                pattern, vocab, special_tokens = self.load_llama_config()
+            elif self.tokenizer_type == "mistral":
+                print("Using Mistral Tekken 7 configuration...")
+                pattern, vocab, special_tokens = self.load_mistral_config()
+            else:
+                raise ValueError(f"Unsupported tokenizer type: {self.tokenizer_type}")
             
             # Initialize TokenDagger
+            tokenizer_name = f"{self.tokenizer_type}_test"
             self.tokendagger_tokenizer = tokendagger.create_tokenizer(
-                name="llama4_test",
+                name=tokenizer_name,
                 pattern=pattern,
                 vocab=vocab,
                 special_tokens=special_tokens
             )
             
-            # Initialize TikToken with the same Llama 4 vocab
+            # Initialize TikToken with the same vocab
             # Convert vocab format for TikToken
             tiktoken_vocab = {}
             for item in vocab:
-                token_bytes = bytes(item["token_bytes"])
+                if isinstance(item["token_bytes"], list):
+                    # Convert list to bytes for mistral config
+                    token_bytes = bytes(item["token_bytes"])
+                else:
+                    # Already bytes for llama config
+                    token_bytes = item["token_bytes"]
                 tiktoken_vocab[token_bytes] = item["rank"]
             
             # Add special tokens to vocab
@@ -126,14 +196,14 @@ class TokenDaggerVsTikTokenTest:
             
             # Create TikToken encoding with the same vocab
             self.tiktoken_tokenizer = tiktoken.Encoding(
-                name="llama4_custom",
+                name=tokenizer_name,
                 pat_str=pattern,
                 mergeable_ranks=tiktoken_vocab,
                 special_tokens=special_tokens
             )
             
-            print(f"✓ Initialized TokenDagger tokenizer: {self.tokendagger_tokenizer}")
-            print(f"✓ Initialized TikToken tokenizer: {self.tiktoken_tokenizer.name}")
+            print(f"✓ Initialized TokenDagger tokenizer: {self.tokendagger_tokenizer} ({self.tokenizer_type})")
+            print(f"✓ Initialized TikToken tokenizer: {self.tiktoken_tokenizer.name} ({self.tokenizer_type})")
             
         except Exception as e:
             print(f"✗ Failed to setup tokenizers: {e}")
@@ -274,14 +344,25 @@ class TokenDaggerVsTikTokenTest:
         print("DECODING TESTS")
         print("="*60)
         
-        # Test with some common token sequences
-        test_token_sequences = [
-            [1, 2, 3],
-            [100, 200, 300],
-            [1000, 2000, 3000],
-            list(range(10)),
-            list(range(100, 110)),
-        ]
+        # Test with token sequences appropriate for the tokenizer type
+        if self.tokenizer_type == "mistral":
+            # Mistral tokens start at 1000 due to special token offset
+            test_token_sequences = [
+                [1000, 1001, 1002],
+                [1100, 1200, 1300],
+                [2000, 3000, 4000],
+                list(range(1000, 1010)),
+                list(range(5000, 5010)),
+            ]
+        else:
+            # Llama tokens start from lower values
+            test_token_sequences = [
+                [1, 2, 3],
+                [100, 200, 300],
+                [1000, 2000, 3000],
+                list(range(10)),
+                list(range(100, 110)),
+            ]
         
         results = []
         
@@ -387,7 +468,7 @@ class TokenDaggerVsTikTokenTest:
     def run_all_tests(self):
         """Run all test suites."""
         print("TokenDagger vs TikToken Correctness Test")
-        print("Using Llama 4 configuration")
+        print(f"Using {self.tokenizer_type.title()} configuration")
         print("="*60)
         
         try:
@@ -410,7 +491,15 @@ class TokenDaggerVsTikTokenTest:
 
 def main():
     """Main test runner."""
-    test_suite = TokenDaggerVsTikTokenTest()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="TokenDagger vs TikToken Correctness Test")
+    parser.add_argument("--tokenizer", choices=["llama", "mistral"], default="llama", 
+                       help="Tokenizer configuration to use (default: llama)")
+    
+    args = parser.parse_args()
+    
+    test_suite = TokenDaggerVsTikTokenTest(tokenizer_type=args.tokenizer)
     success = test_suite.run_all_tests()
     sys.exit(0 if success else 1)
 
