@@ -56,7 +56,7 @@ class ThroughputBenchmark:
     
     def __init__(self, 
                  tokenizer_type: str = "llama",
-                 thread_counts: List[int] = [1, 2, 4, 8],
+                 thread_counts: List[int] = [1, 2, 4, 8, 16, 32],
                  text_size_mb: int = 1024,  # 1GB by default
                  iterations_per_thread: int = 10):
         self.src_dir = Path(__file__).parent.parent / "src"

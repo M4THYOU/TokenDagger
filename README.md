@@ -41,3 +41,5 @@ And for running the tests:
 ```
 pip3 install tiktoken
 ```
+
+AMD EPYC 4584PX - 16c/32t - 4.2 GHz
