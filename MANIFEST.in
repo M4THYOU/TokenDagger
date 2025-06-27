@@ -1,0 +1,18 @@
+include README.md
+include LICENSE
+include Makefile
+recursive-include src *.cpp *.h *.hpp *.json
+recursive-include src/tiktoken *
+recursive-include extern/pybind11 *.h *.hpp
+include pyproject.toml
+exclude tests/*
+exclude *.svg
+exclude *.json
+exclude main
+prune .git
+prune .venv
+prune __pycache__
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.so
+global-exclude .DS_Store 
