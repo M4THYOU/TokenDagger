@@ -10,6 +10,7 @@ import functools
 from typing import AbstractSet, Collection, Literal, Sequence
 from pathlib import Path
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 try:
     from . import _tokendagger_core as tokendagger
@@ -186,6 +187,52 @@ class Tokenizer:
             return self._core_bpe.encode_with_special_tokens(text)
         except Exception as e:
             raise TokenDaggerError(f"Encoding failed: {e}")
+    
+    def encode_batch(
+        self,
+        text: Sequence[str],
+        *,
+        num_threads: int = 8,
+        allowed_special: Literal["all"] | AbstractSet[str] = set(),
+        disallowed_special: Literal["all"] | Collection[str] = set(),
+    ) -> list[list[int]]:
+        """Encode multiple texts in parallel.
+        
+        Args:
+            text: Sequence of texts to encode
+            num_threads: Number of threads to use for parallel processing
+            allowed_special: Special tokens that are allowed in the text
+            disallowed_special: Special tokens that should raise an error if found
+            
+        Returns:
+            List of lists of token IDs
+        """
+        encoder = functools.partial(
+            self.encode, allowed_special=allowed_special, disallowed_special=disallowed_special
+        )
+        with ThreadPoolExecutor(num_threads) as e:
+            return list(e.map(encoder, text))
+        
+    def decode_batch(
+        self,
+        tokens: Sequence[Sequence[int]],
+        *,
+        num_threads: int = 8,
+        errors: str = "replace",
+    ) -> list[str]:
+        """Decode multiple token sequences in parallel.
+        
+        Args:
+            tokens: Sequence of token sequences to decode
+            num_threads: Number of threads to use for parallel processing
+            errors: How to handle decode errors ('replace', 'ignore', 'strict')
+            
+        Returns:
+            List of decoded strings
+        """
+        decoder = functools.partial(self.decode, errors=errors)
+        with ThreadPoolExecutor(num_threads) as e:
+            return list(e.map(decoder, tokens))
     
     # ====================
     # Decoding methods

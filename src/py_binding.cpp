@@ -22,11 +22,14 @@ PYBIND11_MODULE(_tokendagger_core, m) {
         .def(pybind11::init<const std::string&, const std::vector<VocabItem>&, const std::vector<VocabItem>&>(),
              "Initialize CoreBPE with pattern, vocabulary, and special vocabulary",
              pybind11::arg("pattern"), pybind11::arg("vocab"), pybind11::arg("special_vocab"))
-        .def("encode_ordinary", &tiktoken::CoreBPE::encode_ordinary,
-             "Encode text using ordinary BPE tokens only",
-             pybind11::arg("text"))
+        .def("encode_ordinary", [](tiktoken::CoreBPE& self, const std::string& text) {
+            pybind11::gil_scoped_release release;
+            return self.encode_ordinary(text);
+        }, "Encode text using ordinary BPE tokens only",
+           pybind11::arg("text"))
         .def("encode", [](tiktoken::CoreBPE& self, const std::string& text, const std::set<std::string>& allowed_special) {
             // Convert std::set to emhash8::HashSet
+            pybind11::gil_scoped_release release;
             emhash8::HashSet<std::string> allowed_set;
             for (const auto& token : allowed_special) {
                 allowed_set.insert(token);
@@ -34,9 +37,11 @@ PYBIND11_MODULE(_tokendagger_core, m) {
             return self.encode(text, allowed_set);
         }, "Encode text with allowed special tokens",
            pybind11::arg("text"), pybind11::arg("allowed_special"))
-        .def("decode_bytes", &tiktoken::CoreBPE::decode_bytes,
-             "Decode tokens back to bytes",
-             pybind11::arg("tokens"))
+        .def("decode_bytes", [](tiktoken::CoreBPE& self, const std::vector<int>& tokens) {
+            pybind11::gil_scoped_release release;
+            return self.decode_bytes(tokens);
+        }, "Decode tokens back to bytes",
+           pybind11::arg("tokens"))
         .def("special_tokens", &tiktoken::CoreBPE::special_tokens,
              "Get list of special tokens")
         .def("encode_with_special_tokens", &tiktoken::CoreBPE::encode_with_special_tokens,
