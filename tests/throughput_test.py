@@ -30,6 +30,17 @@ from dataclasses import dataclass
 
 import tiktoken
 
+# Import matplotlib for SVG generation
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend
+    import numpy as np
+    HAS_MATPLOTLIB = True
+except ImportError:
+    print("Warning: matplotlib not available. SVG generation will be disabled.")
+    HAS_MATPLOTLIB = False
+
 try:
     from tokendagger import wrapper as tokendagger
 except ImportError as e:
@@ -497,12 +508,126 @@ class ThroughputBenchmark:
             print(f"🐌 CONCLUSION: TikToken is {1/overall_speedup:.2f}x faster than TokenDagger")
         print("="*80)
     
+    def generate_performance_svg(self, output_path: str = "throughput_performance.svg"):
+        """Generate an SVG bar chart showing TokenDagger vs TikToken performance."""
+        if not HAS_MATPLOTLIB:
+            print("Cannot generate SVG: matplotlib not available")
+            return
+            
+        if not self.results:
+            print("No benchmark results to visualize!")
+            return
+        
+        # Group results by tokenizer
+        td_results = [r for r in self.results if r.tokenizer_name == "TokenDagger"]
+        tt_results = [r for r in self.results if r.tokenizer_name == "TikToken"]
+        
+        if not td_results or not tt_results:
+            print("Incomplete results - need both TokenDagger and TikToken results")
+            return
+        
+        # Prepare data for plotting
+        thread_counts = sorted(list(set([r.thread_count for r in self.results])))
+        td_throughputs = []
+        tt_throughputs = []
+        
+        for thread_count in thread_counts:
+            td_result = next((r for r in td_results if r.thread_count == thread_count), None)
+            tt_result = next((r for r in tt_results if r.thread_count == thread_count), None)
+            
+            td_throughputs.append(td_result.throughput_mb_per_sec if td_result else 0)
+            tt_throughputs.append(tt_result.throughput_mb_per_sec if tt_result else 0)
+        
+        # Create the plot
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        # Set up bar positions
+        x = np.arange(len(thread_counts))
+        width = 0.35
+        
+        # Create bars
+        td_bars = ax.bar(x - width/2, td_throughputs, width, 
+                        label='TokenDagger', color='#2E86AB', alpha=0.8)
+        tt_bars = ax.bar(x + width/2, tt_throughputs, width,
+                        label='TikToken', color='#A23B72', alpha=0.8)
+        
+        # Customize the plot
+        ax.set_xlabel('Thread Count', fontsize=14, fontweight='bold')
+        ax.set_ylabel('Throughput (MB/s)', fontsize=14, fontweight='bold')
+        ax.set_title(f'TokenDagger vs TikToken Performance Comparison\n({self.tokenizer_type.title()} Tokenizer, {self.text_size_mb}MB Text)', 
+                    fontsize=16, fontweight='bold', pad=20)
+        ax.set_xticks(x)
+        ax.set_xticklabels([str(tc) for tc in thread_counts])
+        ax.legend(fontsize=12)
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        # Add value labels on bars
+        def add_value_labels(bars):
+            for bar in bars:
+                height = bar.get_height()
+                if height > 0:
+                    ax.text(bar.get_x() + bar.get_width()/2., height + max(max(td_throughputs), max(tt_throughputs)) * 0.01,
+                           f'{height:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        add_value_labels(td_bars)
+        add_value_labels(tt_bars)
+        
+        # Style improvements
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_linewidth(0.5)
+        ax.spines['bottom'].set_linewidth(0.5)
+        
+        # Set y-axis to start from 0 and add some padding
+        max_throughput = max(max(td_throughputs), max(tt_throughputs))
+        ax.set_ylim(0, max_throughput * 1.15)
+        
+        # Add speedup annotations
+        for i, thread_count in enumerate(thread_counts):
+            if td_throughputs[i] > 0 and tt_throughputs[i] > 0:
+                speedup = td_throughputs[i] / tt_throughputs[i]
+                y_pos = max(td_throughputs[i], tt_throughputs[i]) + max_throughput * 0.08
+                color = 'green' if speedup > 1.0 else 'red' if speedup < 0.9 else 'orange'
+                ax.text(i, y_pos, f'{speedup:.2f}x', ha='center', va='center', 
+                       fontsize=9, fontweight='bold', color=color,
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+        
+        plt.tight_layout()
+        
+        # Save as SVG
+        output_file = Path(output_path)
+        plt.savefig(output_file, format='svg', dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"📊 Performance chart saved to: {output_file.absolute()}")
+        
+        # Also save raw data as JSON for reference
+        data_file = output_file.with_suffix('.json')
+        chart_data = {
+            'tokenizer_type': self.tokenizer_type,
+            'text_size_mb': self.text_size_mb,
+            'thread_counts': thread_counts,
+            'tokendagger_throughput': td_throughputs,
+            'tiktoken_throughput': tt_throughputs,
+            'speedups': [td/tt if tt > 0 else 0 for td, tt in zip(td_throughputs, tt_throughputs)]
+        }
+        
+        with open(data_file, 'w') as f:
+            json.dump(chart_data, f, indent=2)
+        
+        print(f"📈 Chart data saved to: {data_file.absolute()}")
+    
     def run_full_benchmark(self):
         """Run the complete throughput benchmark suite."""
         try:
             self.setup_tokenizers()
             self.run_throughput_benchmarks()
             self.print_summary_report()
+            
+            # Generate SVG chart
+            chart_filename = f"throughput_{self.tokenizer_type}_{self.text_size_mb}mb.svg"
+            self.generate_performance_svg(chart_filename)
+            
         except Exception as e:
             print(f"Benchmark failed: {e}")
             import traceback
@@ -518,14 +643,16 @@ def main():
     parser = argparse.ArgumentParser(description="TokenDagger vs TikToken Multithreaded Throughput Benchmark")
     parser.add_argument("--tokenizer", choices=["llama", "mistral"], default="llama", 
                        help="Tokenizer configuration to use (default: llama)")
-    parser.add_argument("--threads", type=str, default="1,2,4,8",
-                       help="Comma-separated list of thread counts to test (default: 1,2,4,8)")
+    parser.add_argument("--threads", type=str, default="1,2,4,8,16,32",
+                       help="Comma-separated list of thread counts to test (default: 1,2,4,8,16,32)")
     parser.add_argument("--text-size", type=int, default=1024,
                        help="Size of test text in MB (default: 1024 = 1GB)")
     parser.add_argument("--iterations", type=int, default=10,
                        help="Iterations per thread (default: 10)")
     parser.add_argument("--quick", action="store_true",
                        help="Run quick benchmark (smaller text size and fewer iterations)")
+    parser.add_argument("--output", type=str, default=None,
+                       help="Output SVG filename (default: auto-generated)")
     
     args = parser.parse_args()
     
