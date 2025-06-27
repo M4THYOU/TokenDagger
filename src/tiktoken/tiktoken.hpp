@@ -43,7 +43,6 @@ namespace tiktoken {
         emhash8::HashMap<int, std::vector<unsigned char>> decoder;
         emhash8::HashMap<int, std::vector<unsigned char>> special_tokens_decoder;
         pcre2_code* regex_pattern = nullptr;
-        pcre2_match_data* match_data = nullptr;
 
     public:
         CoreBPE(const std::string& pattern, const std::vector<VocabItem>& vocab, const std::vector<VocabItem>& special_vocab) {
@@ -71,9 +70,6 @@ namespace tiktoken {
             if (regex_pattern) {
                 pcre2_code_free_8(regex_pattern);
             }
-            if (match_data) {
-                pcre2_match_data_free(match_data);
-            }
         }
         
         // BPE-specific methods
@@ -88,6 +84,7 @@ namespace tiktoken {
         std::vector<std::string> split_text(const std::string& text, const size_t start_offset, const size_t end_offset) const;
         std::pair<size_t, std::string> find_next_special_token(const std::string& text, size_t start_pos, emhash8::HashMap<std::string, int>& next_special_cache);
         bool init_regex(const std::string& pattern);
+        pcre2_match_data* get_thread_local_match_data() const;
     };
 
     // Function declarations - updated to use emhash

@@ -9,14 +9,49 @@
 
 namespace tiktoken {
 
+    pcre2_match_data* CoreBPE::get_thread_local_match_data() const {
+        thread_local pcre2_match_data* tl_match_data = nullptr;
+        thread_local pcre2_code* tl_regex_pattern = nullptr;
+        
+        // Register cleanup function on first use
+        static thread_local bool cleanup_registered = false;
+        if (!cleanup_registered) {
+            std::atexit([]() {
+                if (tl_match_data) {
+                    pcre2_match_data_free(tl_match_data);
+                    tl_match_data = nullptr;
+                }
+            });
+            cleanup_registered = true;
+        }
+        
+        // Check if we need to create/recreate the thread-local match_data
+        if (!tl_match_data || tl_regex_pattern != regex_pattern) {
+            // Clean up old match_data if it exists
+            if (tl_match_data) {
+                pcre2_match_data_free(tl_match_data);
+            }
+            
+            // Create new match_data for this thread
+            if (regex_pattern) {
+                tl_match_data = pcre2_match_data_create_from_pattern(regex_pattern, nullptr);
+                tl_regex_pattern = regex_pattern;
+            } else {
+                tl_match_data = nullptr;
+                tl_regex_pattern = nullptr;
+            }
+        }
+        
+        return tl_match_data;
+    }
+
     bool CoreBPE::init_regex(const std::string& pattern) {
         int error_number;
         PCRE2_SIZE error_offset;
-        // Enable UTF-8 mode and Unicode properties for proper Unicode support
         regex_pattern = pcre2_compile_8(
             (PCRE2_SPTR8)pattern.c_str(), 
             PCRE2_ZERO_TERMINATED, 
-            PCRE2_UTF | PCRE2_UCP,  // Enable UTF-8 and Unicode character properties
+            PCRE2_UTF | PCRE2_UCP,
             &error_number, 
             &error_offset, 
             NULL
@@ -28,7 +63,6 @@ namespace tiktoken {
         if (pcre2_jit_compile_8(regex_pattern, PCRE2_JIT_COMPLETE) < 0) {
             printf("ERROR: PCRE2 built without JIT, expect it to be slow\n");
         }
-        match_data = pcre2_match_data_create_from_pattern(regex_pattern, nullptr);
 
         return true;
     }
@@ -41,36 +75,41 @@ namespace tiktoken {
             return pieces;
         }
 
+        // Get thread-local match_data
+        pcre2_match_data* local_match_data = get_thread_local_match_data();
+        if (!local_match_data) {
+            printf("ERROR: Failed to get thread-local match data\n");
+            return pieces;
+        }
+
         PCRE2_SIZE start_offset = start;
         while (start_offset < end_offset) {
             int rc = pcre2_match(
                 regex_pattern,
                 (PCRE2_SPTR8)text.data(), end_offset,
                 start_offset,
-                PCRE2_NO_UTF_CHECK | PCRE2_NOTEMPTY,   // for performance
-                match_data,
+                PCRE2_NO_UTF_CHECK | PCRE2_NOTEMPTY,
+                local_match_data,  // Use thread-local match_data
                 nullptr);
             
             if (rc < 0) {
                 if (rc == PCRE2_ERROR_NOMATCH) {
-                    // No more matches, add remaining text if any
                     if (start_offset < end_offset) {
                         pieces.push_back(text.substr(start_offset));
                     }
                     break;
                 } else {
-                    // Handle other errors
                     break;
                 }
             }
             
             // Get match information
-            PCRE2_SIZE* ovector = pcre2_get_ovector_pointer(match_data);
+            PCRE2_SIZE* ovector = pcre2_get_ovector_pointer(local_match_data);
             PCRE2_SIZE match_start = ovector[0];
             PCRE2_SIZE match_end = ovector[1];
             
             // Add the matched piece
-            if (match_start < match_end) {  // TODO: might need to include start offset here.
+            if (match_start < match_end) {
                 pieces.push_back(text.substr(match_start, match_end - match_start));
             }
             
@@ -82,6 +121,8 @@ namespace tiktoken {
                 start_offset++;
             }
         }
+        
+        // No need to free local_match_data - it's thread_local and will be reused
         
         return pieces;
     }
