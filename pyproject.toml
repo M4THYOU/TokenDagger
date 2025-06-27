@@ -9,14 +9,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tokendagger"
 dynamic = ["version"]
-description = "High-Performance Implementation of OpenAI's TikToken"
+description = "High-Performance Implementation of OpenAI's TikToken - 2x Throughput, 4x Faster Code Tokenization"
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
 ]
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.8"
-keywords = ["tokenization", "tiktoken", "nlp", "text-processing"]
+keywords = ["tokenization", "tiktoken", "nlp", "text-processing", "openai", "bpe"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -30,6 +30,7 @@ classifiers = [
     "Programming Language :: C++",
     "Topic :: Text Processing :: Linguistic",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = []
 
@@ -37,6 +38,7 @@ dependencies = []
 Homepage = "https://github.com/M4THYOU/TokenDagger"
 Repository = "https://github.com/M4THYOU/TokenDagger"
 "Bug Reports" = "https://github.com/M4THYOU/TokenDagger/issues"
+Documentation = "https://github.com/M4THYOU/TokenDagger#readme"
 
 [project.optional-dependencies]
 dev = [

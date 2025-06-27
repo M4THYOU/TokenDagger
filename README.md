@@ -38,6 +38,10 @@ python3 tests/code_performance_benchmark.py --tokenizer llama
 
 ### From PyPI (Recommended)
 
+```
+pip install tokendagger
+```
+
 
 ## 🛠️ Dev Install
 
