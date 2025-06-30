@@ -8,9 +8,6 @@ import time
 # Create a simple vocabulary for testing
 # In a real scenario, you'd load this from actual tokenizer files
 def create_test_vocab():
-    vocab_data = []
-    
-    # Add basic ASCII characters and common words
     vocab_items = [
         # Common punctuation and symbols
         " ", ".", ",", "!", "?", ":", ";", "'", '"', "-", "(", ")", "[", "]", "{", "}", 
@@ -29,14 +26,12 @@ def create_test_vocab():
         "**", "##", "```", "python", "javascript", "const", "let", "var", "function",
     ]
     
+    # Convert to TikToken format (bytes -> rank mapping)
+    mergeable_ranks = {}
     for i, item in enumerate(vocab_items):
-        vocab_data.append({
-            "rank": i,
-            "token_bytes": list(item.encode('utf-8')),
-            "token_string": item
-        })
+        mergeable_ranks[item.encode('utf-8')] = i
     
-    return vocab_data
+    return mergeable_ranks
 
 def create_special_tokens():
     return {
@@ -59,16 +54,17 @@ except FileNotFoundError:
     # Fallback text if file doesn't exist
     prompt = "This is a test prompt for tokenization."
 
-# Create TokenDagger tokenizer
+# Create TokenDagger tokenizer using TikToken-compatible API
 print("Creating TokenDagger tokenizer...")
 try:
-    vocab_data = create_test_vocab()
+    mergeable_ranks = create_test_vocab()
     special_tokens = create_special_tokens()
     
-    tokenizer = tokendagger.create_tokenizer(
+    # Use the new TikToken-compatible API
+    tokenizer = tokendagger.Encoding(
         name="test_tokenizer",
-        pattern=r"[a-zA-Z]+|\s+|[0-9]+|[^\w\s]",  # NEW - includes \s+ for spaces
-        vocab=vocab_data,
+        pat_str=r"[a-zA-Z]+|\s+|[0-9]+|[^\w\s]",  # TikToken uses pat_str instead of pattern
+        mergeable_ranks=mergeable_ranks,
         special_tokens=special_tokens
     )
     
@@ -197,5 +193,5 @@ if len(tokens) > 0:
             print(f"   Token {token_id}: <decode error>")
 
 print("\n" + "="*80)
-print("TEST COMPLETE")
+print("TEST COMPLETE - Using TikToken-Compatible API!")
 print("="*80)

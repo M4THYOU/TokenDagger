@@ -202,36 +202,34 @@ class PerformanceBenchmark:
         else:
             raise ValueError(f"Unsupported tokenizer type: {self.tokenizer_type}")
         
-        # Initialize TokenDagger
+        # Convert TokenDagger format to TikToken format
+        mergeable_ranks = {}
+        for item in vocab:
+            if isinstance(item["token_bytes"], list):
+                token_bytes = bytes(item["token_bytes"])
+            else:
+                token_bytes = item["token_bytes"]
+            mergeable_ranks[token_bytes] = item["rank"]
+        
+        # Add special tokens to mergeable_ranks
+        for token_str, rank in special_tokens.items():
+            mergeable_ranks[token_str.encode('utf-8')] = rank
+        
         tokenizer_name = f"{self.tokenizer_type}_perf_test"
-        self.tokendagger_tokenizer = tokendagger.create_tokenizer(
+        
+        # Initialize TokenDagger using TikToken-compatible API
+        self.tokendagger_tokenizer = tokendagger.Encoding(
             name=tokenizer_name,
-            pattern=pattern,
-            vocab=vocab,
+            pat_str=pattern,
+            mergeable_ranks=mergeable_ranks,
             special_tokens=special_tokens
         )
         
-        # Initialize TikToken with the same vocab
-        # Convert vocab format for TikToken
-        tiktoken_vocab = {}
-        for item in vocab:
-            if isinstance(item["token_bytes"], list):
-                # Convert list to bytes for mistral config
-                token_bytes = bytes(item["token_bytes"])
-            else:
-                # Already bytes for llama config
-                token_bytes = item["token_bytes"]
-            tiktoken_vocab[token_bytes] = item["rank"]
-        
-        # Add special tokens to vocab
-        for token_str, rank in special_tokens.items():
-            tiktoken_vocab[token_str.encode('utf-8')] = rank
-        
-        # Create TikToken encoding with the same vocab
+        # Initialize TikToken with the same configuration
         self.tiktoken_tokenizer = tiktoken.Encoding(
             name=tokenizer_name,
             pat_str=pattern,
-            mergeable_ranks=tiktoken_vocab,
+            mergeable_ranks=mergeable_ranks,
             special_tokens=special_tokens
         )
         

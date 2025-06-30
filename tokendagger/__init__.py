@@ -7,6 +7,7 @@ from .wrapper import (
     TokenDaggerError,
     load_tokenizer,
     create_tokenizer,
+    Encoding,
 )
 
 try:
@@ -20,5 +21,6 @@ __all__ = [
     "TokenDaggerError", 
     "load_tokenizer",
     "create_tokenizer",
+    "Encoding",
     "core",
 ] 

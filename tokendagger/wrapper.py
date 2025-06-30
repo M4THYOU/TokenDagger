@@ -35,8 +35,10 @@ class Tokenizer:
         self,
         name: str,
         *,
-        pattern: str,
+        pattern: str | None = None,
+        pat_str: str | None = None, # for tiktoken compat.
         vocab: list[dict] | None = None,
+        mergeable_ranks: dict[bytes, int] | None = None, # for tiktoken compat.
         special_tokens: dict[str, int] | None = None,
         vocab_file: str | Path | None = None,
         special_tokens_file: str | Path | None = None,
@@ -46,19 +48,38 @@ class Tokenizer:
         Args:
             name: Name of the tokenizer
             pattern: Regex pattern for text splitting
+            pat_str: Regex pattern for text splitting (for tiktoken compat)
             vocab: List of vocabulary items as dicts with 'rank', 'token_bytes', 'token_string'
+            mergeable_ranks: Dict mapping bytes to their ranks (for tiktoken compat)
             special_tokens: Dict mapping special token strings to their IDs
             vocab_file: Path to vocabulary file (JSON format)
             special_tokens_file: Path to special tokens file (JSON format)
         """
         self.name = name
+        # TikToken compatibility
+        if pat_str is not None:
+            pattern = pat_str
+        if mergeable_ranks is not None:
+            vocab = mergeable_ranks
         self.pattern = pattern
+        
+        # Convert TikToken format to TokenDagger format if needed
+        if isinstance(mergeable_ranks, dict):
+            # TikToken format: {bytes: rank} -> TokenDagger format
+            vocab_list = []
+            for token_bytes, rank in mergeable_ranks.items():
+                vocab_list.append({
+                    "rank": rank,
+                    "token_bytes": list(token_bytes),
+                    "token_string": ""
+                })
+            vocab = vocab_list
         
         # Load vocabulary
         if vocab_file:
             vocab = self._load_vocab_file(vocab_file)
         elif vocab is None:
-            raise ValueError("Either 'vocab' or 'vocab_file' must be provided")
+            raise ValueError("Either 'vocab', 'mergeable_ranks', or 'vocab_file' must be provided")
             
         # Load special tokens
         if special_tokens_file:
@@ -357,3 +378,18 @@ def create_tokenizer(
         vocab=vocab,
         special_tokens=special_tokens,
     ) 
+
+def Encoding(
+    name: str,
+    *,
+    pat_str: str,
+    mergeable_ranks: dict[bytes, int],
+    special_tokens: dict[str, int] | None = None,
+) -> Tokenizer:
+    """TikToken-compatible factory function."""
+    return Tokenizer(
+        name=name,
+        pat_str=pat_str,
+        mergeable_ranks=mergeable_ranks,
+        special_tokens=special_tokens or {}
+    )
