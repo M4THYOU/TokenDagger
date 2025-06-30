@@ -15,7 +15,7 @@ try:
 except ImportError:
     core = None
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = [
     "Tokenizer",
     "TokenDaggerError", 
