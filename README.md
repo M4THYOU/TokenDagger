@@ -13,8 +13,8 @@ Performed on an `AMD EPYC 4584PX - 16c/32t - 4.2 GHz`.
 ![Throughput Benchmark Results](throughput_llama_1024mb.svg)
 
 - **Fast Regex Parsing**: Optimized PCRE2 regex engine for efficient token pattern matching
+- **Drop-In Replacement**: Full compatibility with OpenAI's TikToken tokenizer
 - **Simplified BPE**: Simplied algorithm to reduce performance impact of large special token vocabulary.
-- **OpenAI Compatible**: Full compatibility with OpenAI's TikToken tokenizer
 
 ## Run Tests
 
