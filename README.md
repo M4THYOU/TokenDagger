@@ -4,7 +4,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyPI version](https://badge.fury.io/py/tokendagger.svg)](https://badge.fury.io/py/tokendagger)
 
-A fast implementation of OpenAI's [TikToken](https://github.com/openai/tiktoken), designed for large-scale text processing. 2x Throughput and 4x faster on code sample tokenization.
+A fast, drop-in implementation of OpenAI's [TikToken](https://github.com/openai/tiktoken), designed for large-scale text processing. 2x Throughput and 4x faster on code sample tokenization.
 
 ## Benchmarks
 
