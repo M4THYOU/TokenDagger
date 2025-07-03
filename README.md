@@ -37,14 +37,28 @@ python3 tests/code_performance_benchmark.py --tokenizer llama
 ================================================================================
 ```
 
-## 📦 Installation
+## 📦 Usage
 
-### From PyPI (Recommended)
 
 ```
 pip install tokendagger
 ```
 
+Then replace Tiktoken:
+
+```python
+# import tiktoken
+import tokendagger as tiktoken
+
+...
+
+tokenizer = tiktoken.Encoding(
+    name=name,
+    pat_str=pattern,
+    mergeable_ranks=vocab,
+    special_tokens=special_tokens,
+)
+```
 
 ## 🛠️ Dev Install
 
