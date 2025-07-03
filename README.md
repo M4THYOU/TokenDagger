@@ -47,7 +47,7 @@ pip install tokendagger
 Then replace Tiktoken:
 
 ```python
-# import tiktoken
+# import tiktoken --- Remove this line!
 import tokendagger as tiktoken
 
 ...
