@@ -10,6 +10,8 @@ A fast, drop-in implementation of OpenAI's [TikToken](https://github.com/openai/
 
 Performed on an `AMD EPYC 4584PX - 16c/32t - 4.2 GHz` w/64GB memory. Hugging Face's batch tokenizer used way more memory than Tiktoken and TokenDagger. 256MB was the largest input size it could process with OOM.
 
+The benchmark was performed on [meta-llama/Llama-4-Scout-17B-16E-Instruct](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct/tree/main). [mistralai/Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410/tree/main) is also supported for testing, by using argument `--tokenizer mistral`.
+
 ![Throughput Benchmark Results](throughput_llama_1024mb.svg)
 ![Throughput Benchmark Results](throughput_llama_256mb.svg)
 
