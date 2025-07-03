@@ -8,9 +8,10 @@ A fast, drop-in implementation of OpenAI's [TikToken](https://github.com/openai/
 
 ## Benchmarks
 
-Performed on an `AMD EPYC 4584PX - 16c/32t - 4.2 GHz`.
+Performed on an `AMD EPYC 4584PX - 16c/32t - 4.2 GHz` w/64GB memory. Hugging Face's batch tokenizer used way more memory than Tiktoken and TokenDagger. 256MB was the largest input size it could process with OOM.
 
 ![Throughput Benchmark Results](throughput_llama_1024mb.svg)
+![Throughput Benchmark Results](throughput_llama_256mb.svg)
 
 - **Fast Regex Parsing**: Optimized PCRE2 regex engine for efficient token pattern matching
 - **Drop-In Replacement**: Full compatibility with OpenAI's TikToken tokenizer

@@ -30,6 +30,9 @@ from dataclasses import dataclass
 
 import tiktoken
 
+# Import Hugging Face tokenizers
+from transformers import AutoTokenizer
+
 # Import matplotlib for SVG generation
 import matplotlib.pyplot as plt
 import matplotlib
@@ -85,7 +88,10 @@ class ThroughputBenchmark:
         print(f"  Iterations per thread: {self.iterations_per_thread}")
     
     def load_llama_config(self) -> Tuple[str, List[Dict[str, Any]], Dict[str, int]]:
-        """Load Llama 4 configuration from the codebase."""
+        """
+        Load Llama 4 configuration from the codebase.
+        https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct
+        """
         # Hard-coded pattern from main.cpp
         pattern = r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
         
@@ -98,7 +104,10 @@ class ThroughputBenchmark:
         return pattern, vocab, special_tokens
     
     def load_mistral_config(self) -> Tuple[str, List[Dict[str, Any]], Dict[str, int]]: 
-        """Load Mistral's Tekken 7 configuration from the codebase."""
+        """
+        Load Mistral's Tekken 7 configuration from the codebase.
+        https://huggingface.co/mistralai/Ministral-8B-Instruct-2410/tree/main
+        """
         config_file = self.test_dir / "configs" / "mistral3.2" / "tekken.json"
         if not config_file.exists():
             raise FileNotFoundError(f"Tekken config file not found: {config_file}")
@@ -221,6 +230,16 @@ class ThroughputBenchmark:
             special_tokens=special_tokens
         )
         
+        # Initialize Hugging Face Fast Tokenizer
+        # Use the appropriate HF model based on tokenizer type
+        if self.tokenizer_type == "llama":
+            model_name = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+        elif self.tokenizer_type == "mistral":
+            model_name = "mistralai/Ministral-8B-Instruct-2410"
+        
+        self.hf_tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+        print(f"✓ HF Fast Tokenizer initialized ({model_name})")
+        
         print(f"✓ TokenDagger tokenizer initialized ({self.tokenizer_type})")
         print(f"✓ TikToken tokenizer initialized ({self.tokenizer_type})")
     
@@ -291,7 +310,7 @@ class ThroughputBenchmark:
             current_size += len(paragraph.encode('utf-8'))
             
             # Progress indicator for large files
-            if len(text_chunks) % 1000 == 0:
+            if len(text_chunks) % 100000 == 0:
                 print(f"Generated {current_size / (1024*1024):.1f} MB...")
         
         full_text = "".join(text_chunks)
@@ -312,6 +331,65 @@ class ThroughputBenchmark:
         print(f"Generated {actual_size_mb:.2f} MB of text ({len(full_text):,} characters)")
         
         return full_text
+    
+    def benchmark_hf_throughput(self, tokenizer, tokenizer_name: str, thread_count: int, test_text: str) -> ThroughputResult:
+        """Benchmark HF Fast Tokenizer throughput."""
+        print(f"  Testing {tokenizer_name} with {thread_count} threads...")
+        
+        # Split text into chunks for processing
+        chunk_size = len(test_text) // (thread_count * self.iterations_per_thread)
+        text_chunks = []
+        
+        for i in range(thread_count * self.iterations_per_thread):
+            start_idx = i * chunk_size
+            if i == (thread_count * self.iterations_per_thread) - 1:
+                # Last chunk gets remaining text
+                chunk = test_text[start_idx:]
+            else:
+                end_idx = (i + 1) * chunk_size
+                chunk = test_text[start_idx:end_idx]
+            text_chunks.append(chunk)
+        
+        # Benchmark the tokenizer
+        start_time = time.perf_counter()
+        
+        try:
+            # HF Fast Tokenizer batch encoding
+            batch_encoding = tokenizer(text_chunks, padding=False, truncation=False, return_tensors=None)
+            token_results = batch_encoding['input_ids']
+            success = True
+        except Exception as e:
+            print(f"    ERROR: {tokenizer_name} batch encode failed: {e}")
+            return None
+        
+        end_time = time.perf_counter()
+        
+        if not success or not token_results:
+            print(f"    ERROR: No successful tokenizations for {tokenizer_name}")
+            return None
+        
+        # Calculate statistics
+        total_time = end_time - start_time
+        total_bytes = sum(len(chunk.encode('utf-8')) for chunk in text_chunks)
+        total_tokens = sum(len(tokens) for tokens in token_results)
+        total_mb = total_bytes / (1024 * 1024)
+        
+        throughput_mb_per_sec = total_mb / total_time
+        throughput_tokens_per_sec = total_tokens / total_time
+        avg_latency_ms = (total_time / len(text_chunks)) * 1000
+        
+        print(f"    {tokenizer_name}: {throughput_mb_per_sec:.2f} MB/s, {throughput_tokens_per_sec:.0f} tokens/s")
+        
+        return ThroughputResult(
+            thread_count=thread_count,
+            tokenizer_name=tokenizer_name,
+            total_text_size_mb=total_mb,
+            total_tokens=total_tokens,
+            total_time_seconds=total_time,
+            throughput_mb_per_sec=throughput_mb_per_sec,
+            throughput_tokens_per_sec=throughput_tokens_per_sec,
+            avg_latency_ms=avg_latency_ms
+        )
     
     def benchmark_throughput(self, tokenizer, tokenizer_name: str, thread_count: int, test_text: str) -> ThroughputResult:
         """Benchmark tokenizer throughput with specified thread count."""
@@ -407,11 +485,28 @@ class ThroughputBenchmark:
             if tt_result:
                 self.results.append(tt_result)
             
+            # Test HF Fast Tokenizer
+            hf_result = None
+            if self.hf_tokenizer:
+                hf_result = self.benchmark_hf_throughput(
+                    self.hf_tokenizer,
+                    "HF Fast Tokenizer",
+                    thread_count,
+                    test_text
+                )
+                if hf_result:
+                    self.results.append(hf_result)
+            
             # Compare results
             if td_result and tt_result:
                 mb_speedup = td_result.throughput_mb_per_sec / tt_result.throughput_mb_per_sec
                 token_speedup = td_result.throughput_tokens_per_sec / tt_result.throughput_tokens_per_sec
-                print(f"  Speedup: {mb_speedup:.2f}x MB/s, {token_speedup:.2f}x tokens/s")
+                print(f"  TokenDagger vs TikToken: {mb_speedup:.2f}x MB/s, {token_speedup:.2f}x tokens/s")
+            
+            if td_result and hf_result:
+                mb_speedup = td_result.throughput_mb_per_sec / hf_result.throughput_mb_per_sec
+                token_speedup = td_result.throughput_tokens_per_sec / hf_result.throughput_tokens_per_sec
+                print(f"  TokenDagger vs HF Fast: {mb_speedup:.2f}x MB/s, {token_speedup:.2f}x tokens/s")
     
     def print_summary_report(self):
         """Print comprehensive throughput analysis."""
@@ -426,36 +521,61 @@ class ThroughputBenchmark:
         # Group results by tokenizer
         td_results = [r for r in self.results if r.tokenizer_name == "TokenDagger"]
         tt_results = [r for r in self.results if r.tokenizer_name == "TikToken"]
+        hf_results = [r for r in self.results if r.tokenizer_name == "HF Fast Tokenizer"]
         
         if not td_results or not tt_results:
             print("Incomplete results - need both TokenDagger and TikToken results")
             return
         
         print(f"\nTHROUGHPUT BY THREAD COUNT:")
-        print(f"{'Threads':<8} {'TokenDagger':<15} {'TikToken':<15} {'Speedup':<10}")
-        print(f"{'='*8} {'='*15} {'='*15} {'='*10}")
+        if hf_results:
+            print(f"{'Threads':<8} {'TokenDagger':<15} {'TikToken':<15} {'HF Fast':<15} {'TD/TT':<10} {'TD/HF':<10}")
+            print(f"{'='*8} {'='*15} {'='*15} {'='*15} {'='*10} {'='*10}")
+        else:
+            print(f"{'Threads':<8} {'TokenDagger':<15} {'TikToken':<15} {'Speedup':<10}")
+            print(f"{'='*8} {'='*15} {'='*15} {'='*10}")
         
         for thread_count in self.thread_counts:
             td_result = next((r for r in td_results if r.thread_count == thread_count), None)
             tt_result = next((r for r in tt_results if r.thread_count == thread_count), None)
+            hf_result = next((r for r in hf_results if r.thread_count == thread_count), None)
             
             if td_result and tt_result:
-                speedup = td_result.throughput_mb_per_sec / tt_result.throughput_mb_per_sec
-                print(f"{thread_count:<8} {td_result.throughput_mb_per_sec:<15.2f} "
-                      f"{tt_result.throughput_mb_per_sec:<15.2f} {speedup:<10.2f}x")
+                if hf_results and hf_result:
+                    speedup_tt = td_result.throughput_mb_per_sec / tt_result.throughput_mb_per_sec
+                    speedup_hf = td_result.throughput_mb_per_sec / hf_result.throughput_mb_per_sec
+                    print(f"{thread_count:<8} {td_result.throughput_mb_per_sec:<15.2f} "
+                          f"{tt_result.throughput_mb_per_sec:<15.2f} {hf_result.throughput_mb_per_sec:<15.2f} "
+                          f"{speedup_tt:<10.2f}x {speedup_hf:<10.2f}x")
+                else:
+                    speedup = td_result.throughput_mb_per_sec / tt_result.throughput_mb_per_sec
+                    print(f"{thread_count:<8} {td_result.throughput_mb_per_sec:<15.2f} "
+                          f"{tt_result.throughput_mb_per_sec:<15.2f} {speedup:<10.2f}x")
         
         print(f"\nTOKENS PER SECOND BY THREAD COUNT:")
-        print(f"{'Threads':<8} {'TokenDagger':<15} {'TikToken':<15} {'Speedup':<10}")
-        print(f"{'='*8} {'='*15} {'='*15} {'='*10}")
+        if hf_results:
+            print(f"{'Threads':<8} {'TokenDagger':<15} {'TikToken':<15} {'HF Fast':<15} {'TD/TT':<10} {'TD/HF':<10}")
+            print(f"{'='*8} {'='*15} {'='*15} {'='*15} {'='*10} {'='*10}")
+        else:
+            print(f"{'Threads':<8} {'TokenDagger':<15} {'TikToken':<15} {'Speedup':<10}")
+            print(f"{'='*8} {'='*15} {'='*15} {'='*10}")
         
         for thread_count in self.thread_counts:
             td_result = next((r for r in td_results if r.thread_count == thread_count), None)
             tt_result = next((r for r in tt_results if r.thread_count == thread_count), None)
+            hf_result = next((r for r in hf_results if r.thread_count == thread_count), None)
             
             if td_result and tt_result:
-                speedup = td_result.throughput_tokens_per_sec / tt_result.throughput_tokens_per_sec
-                print(f"{thread_count:<8} {td_result.throughput_tokens_per_sec:<15.0f} "
-                      f"{tt_result.throughput_tokens_per_sec:<15.0f} {speedup:<10.2f}x")
+                if hf_results and hf_result:
+                    speedup_tt = td_result.throughput_tokens_per_sec / tt_result.throughput_tokens_per_sec
+                    speedup_hf = td_result.throughput_tokens_per_sec / hf_result.throughput_tokens_per_sec
+                    print(f"{thread_count:<8} {td_result.throughput_tokens_per_sec:<15.0f} "
+                          f"{tt_result.throughput_tokens_per_sec:<15.0f} {hf_result.throughput_tokens_per_sec:<15.0f} "
+                          f"{speedup_tt:<10.2f}x {speedup_hf:<10.2f}x")
+                else:
+                    speedup = td_result.throughput_tokens_per_sec / tt_result.throughput_tokens_per_sec
+                    print(f"{thread_count:<8} {td_result.throughput_tokens_per_sec:<15.0f} "
+                          f"{tt_result.throughput_tokens_per_sec:<15.0f} {speedup:<10.2f}x")
         
         # Scaling analysis
         print(f"\nSCALING ANALYSIS:")
@@ -489,8 +609,18 @@ class ThroughputBenchmark:
         print(f"TikToken:    {best_tt.throughput_mb_per_sec:.2f} MB/s ({best_tt.throughput_tokens_per_sec:.0f} tokens/s) "
               f"with {best_tt.thread_count} threads")
         
+        if hf_results:
+            best_hf = max(hf_results, key=lambda r: r.throughput_mb_per_sec)
+            print(f"HF Fast:     {best_hf.throughput_mb_per_sec:.2f} MB/s ({best_hf.throughput_tokens_per_sec:.0f} tokens/s) "
+                  f"with {best_hf.thread_count} threads")
+        
         overall_speedup = best_td.throughput_mb_per_sec / best_tt.throughput_mb_per_sec
-        print(f"\nOVERALL BEST SPEEDUP: {overall_speedup:.2f}x")
+        print(f"\nOVERALL BEST SPEEDUP vs TikToken: {overall_speedup:.2f}x")
+        
+        if hf_results:
+            best_hf = max(hf_results, key=lambda r: r.throughput_mb_per_sec)
+            hf_speedup = best_td.throughput_mb_per_sec / best_hf.throughput_mb_per_sec
+            print(f"OVERALL BEST SPEEDUP vs HF Fast: {hf_speedup:.2f}x")
         
         # Final conclusion
         print(f"\n" + "="*80)
@@ -515,6 +645,7 @@ class ThroughputBenchmark:
         # Group results by tokenizer
         td_results = [r for r in self.results if r.tokenizer_name == "TokenDagger"]
         tt_results = [r for r in self.results if r.tokenizer_name == "TikToken"]
+        hf_results = [r for r in self.results if r.tokenizer_name == "HF Fast Tokenizer"]
         
         if not td_results or not tt_results:
             print("Incomplete results - need both TokenDagger and TikToken results")
@@ -524,47 +655,68 @@ class ThroughputBenchmark:
         thread_counts = sorted(list(set([r.thread_count for r in self.results])))
         td_throughputs = []
         tt_throughputs = []
+        hf_throughputs = []
         
         for thread_count in thread_counts:
             td_result = next((r for r in td_results if r.thread_count == thread_count), None)
             tt_result = next((r for r in tt_results if r.thread_count == thread_count), None)
+            hf_result = next((r for r in hf_results if r.thread_count == thread_count), None)
             
             td_throughputs.append(td_result.throughput_mb_per_sec if td_result else 0)
             tt_throughputs.append(tt_result.throughput_mb_per_sec if tt_result else 0)
+            hf_throughputs.append(hf_result.throughput_mb_per_sec if hf_result else 0)
         
         # Create the plot
         fig, ax = plt.subplots(figsize=(12, 8))
         
         # Set up bar positions
         x = np.arange(len(thread_counts))
-        width = 0.35
+        has_hf = any(hf_throughputs)
+        width = 0.25 if has_hf else 0.35
         
         # Create bars
-        td_bars = ax.bar(x - width/2, td_throughputs, width, 
-                        label='TokenDagger', color='#2E86AB', alpha=0.8)
-        tt_bars = ax.bar(x + width/2, tt_throughputs, width,
-                        label='TikToken', color='#A23B72', alpha=0.8)
+        if has_hf:
+            td_bars = ax.bar(x - width, td_throughputs, width, 
+                            label='TokenDagger', color='#2E86AB', alpha=0.8)
+            tt_bars = ax.bar(x, tt_throughputs, width,
+                            label='TikToken', color='#A23B72', alpha=0.8)
+            hf_bars = ax.bar(x + width, hf_throughputs, width,
+                            label='HF Fast Tokenizer', color='#F18F01', alpha=0.8)
+        else:
+            td_bars = ax.bar(x - width/2, td_throughputs, width, 
+                            label='TokenDagger', color='#2E86AB', alpha=0.8)
+            tt_bars = ax.bar(x + width/2, tt_throughputs, width,
+                            label='TikToken', color='#A23B72', alpha=0.8)
         
         # Customize the plot
         ax.set_xlabel('Thread Count', fontsize=14, fontweight='bold')
         ax.set_ylabel('Throughput (MB/s)', fontsize=14, fontweight='bold')
-        ax.set_title(f'TokenDagger vs TikToken Performance Comparison\n({self.tokenizer_type.title()} Tokenizer, {self.text_size_mb}MB Text)', 
-                    fontsize=16, fontweight='bold', pad=20)
+        title = f'TokenDagger vs TikToken'
+        if has_hf:
+            title += ' vs HF Fast Tokenizer'
+        title += f' Performance Comparison\n({self.tokenizer_type.title()} Tokenizer, {self.text_size_mb}MB Text)'
+        ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
         ax.set_xticks(x)
         ax.set_xticklabels([str(tc) for tc in thread_counts])
         ax.legend(fontsize=12)
         ax.grid(True, alpha=0.3, axis='y')
         
         # Add value labels on bars
+        max_throughput = max(max(td_throughputs), max(tt_throughputs))
+        if has_hf:
+            max_throughput = max(max_throughput, max(hf_throughputs))
+        
         def add_value_labels(bars):
             for bar in bars:
                 height = bar.get_height()
                 if height > 0:
-                    ax.text(bar.get_x() + bar.get_width()/2., height + max(max(td_throughputs), max(tt_throughputs)) * 0.01,
+                    ax.text(bar.get_x() + bar.get_width()/2., height + max_throughput * 0.01,
                            f'{height:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
         
         add_value_labels(td_bars)
         add_value_labels(tt_bars)
+        if has_hf:
+            add_value_labels(hf_bars)
         
         # Style improvements
         ax.spines['top'].set_visible(False)
@@ -573,14 +725,16 @@ class ThroughputBenchmark:
         ax.spines['bottom'].set_linewidth(0.5)
         
         # Set y-axis to start from 0 and add some padding
-        max_throughput = max(max(td_throughputs), max(tt_throughputs))
         ax.set_ylim(0, max_throughput * 1.15)
         
         # Add speedup annotations
         for i, thread_count in enumerate(thread_counts):
             if td_throughputs[i] > 0 and tt_throughputs[i] > 0:
                 speedup = td_throughputs[i] / tt_throughputs[i]
-                y_pos = max(td_throughputs[i], tt_throughputs[i]) + max_throughput * 0.08
+                bar_heights = [td_throughputs[i], tt_throughputs[i]]
+                if has_hf and hf_throughputs[i] > 0:
+                    bar_heights.append(hf_throughputs[i])
+                y_pos = max(bar_heights) + max_throughput * 0.08
                 color = 'green' if speedup > 1.0 else 'red' if speedup < 0.9 else 'orange'
                 ax.text(i, y_pos, f'{speedup:.2f}x', ha='center', va='center', 
                        fontsize=9, fontweight='bold', color=color,
@@ -603,8 +757,12 @@ class ThroughputBenchmark:
             'thread_counts': thread_counts,
             'tokendagger_throughput': td_throughputs,
             'tiktoken_throughput': tt_throughputs,
-            'speedups': [td/tt if tt > 0 else 0 for td, tt in zip(td_throughputs, tt_throughputs)]
+            'speedups_vs_tiktoken': [td/tt if tt > 0 else 0 for td, tt in zip(td_throughputs, tt_throughputs)]
         }
+        
+        if has_hf:
+            chart_data['hf_fast_throughput'] = hf_throughputs
+            chart_data['speedups_vs_hf'] = [td/hf if hf > 0 else 0 for td, hf in zip(td_throughputs, hf_throughputs)]
         
         with open(data_file, 'w') as f:
             json.dump(chart_data, f, indent=2)
